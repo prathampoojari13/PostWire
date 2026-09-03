@@ -252,6 +252,43 @@ async def test_all_adk_tool_responses_are_json_serializable():
     assert isinstance(json.loads(dumped_alerts), list)
 
 
+@pytest.mark.asyncio
+async def test_adk_quota_exhaustion_activates_deterministic_fallback(monkeypatch):
+    """
+    Verify that when Gemini returns an HTTP 429 / RESOURCE_EXHAUSTED daily quota error,
+    PostWire cleanly activates the deterministic safety fallback without crashing or repeating retries.
+    """
+    runtime = GoogleADKCommanderRuntime(model_name="gemini-3.6-flash")
+    mcp_mock = MockGrafanaMCPClient()
+    alert, context, points = generate_regional_incident_telemetry()
+    mcp_mock.set_telemetry(points)
+
+    grafana_tools = GrafanaMCPTools(mcp_mock)
+    qoe_tools = QoEInvestigationTools(
+        analytics=ViewerQoEAnalytics(),
+        release_context=context,
+        telemetry_points=points,
+    )
+
+    # Mock runner.run_async to raise 429 RESOURCE_EXHAUSTED (simulating daily quota exhaustion)
+    async def mock_run_async(*args, **kwargs):
+        raise Exception(
+            "429 ResourceExhausted: Quota exceeded for metric: GenerateRequestsPerDayPerProjectPerModel, quotaValue: 20"
+        )
+        yield  # make it an async generator
+
+    from google.adk import Runner
+    monkeypatch.setattr(Runner, "run_async", mock_run_async)
+
+    report = await runtime.investigate(alert, grafana_tools, qoe_tools)
+
+    # Verify fallback executed and generated a valid, safe incident report
+    assert report.classification == IncidentClassification.CRITICAL_STREAMING_INCIDENT
+    assert "Gemini quota exhausted — deterministic safety fallback activated." in report.summary
+    assert "[SIMULATED]" in report.recommended_mitigation
+    assert len(report.investigation_steps) >= 3
+
+
 def context_ts():
     from datetime import datetime, timezone
     return datetime.now(timezone.utc)

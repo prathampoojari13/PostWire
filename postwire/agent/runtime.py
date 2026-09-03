@@ -305,13 +305,27 @@ class GoogleADKCommanderRuntime(AgentRuntimeInterface):
             return report
 
         except Exception as exc:
-            logger.warning(
-                "Google ADK Agent invocation failed: %s. Falling back to deterministic engine.",
-                exc
+            err_str = str(exc)
+            is_quota = (
+                "429" in err_str
+                or "RESOURCE_EXHAUSTED" in err_str
+                or "quota" in err_str.lower()
             )
+            if is_quota:
+                reason = "Gemini quota exhausted — deterministic safety fallback activated."
+                logger.warning(
+                    "Google ADK Agent quota exhausted (HTTP 429). Activating deterministic safety fallback."
+                )
+            else:
+                reason = f"Gemini invocation error ({exc.__class__.__name__}) — deterministic safety fallback activated."
+                logger.warning(
+                    "Google ADK Agent error (%s). Activating deterministic safety fallback.",
+                    exc.__class__.__name__,
+                )
+
             fallback = DeterministicCommanderRuntime()
             fallback_report = await fallback.investigate(alert, grafana_tools, qoe_tools)
-            fallback_report.summary += f" [Note: Fallback to deterministic engine due to: {exc}]"
+            fallback_report.summary += f" [Note: {reason}]"
             return fallback_report
 
     def _parse_adk_output(self, text: str, recorded_steps: List[InvestigationStep]) -> IncidentReport:

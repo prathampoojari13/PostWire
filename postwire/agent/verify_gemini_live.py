@@ -75,10 +75,15 @@ async def run_live_gemini_verification():
             telemetry_points=points,
         )
 
-        if "Fallback to deterministic engine" in report.summary:
+        if "Fallback to deterministic engine" in report.summary or "fallback activated" in report.summary.lower():
             print("\n" + "!" * 70)
-            print("LIVE GEMINI INFERENCE FAILED — Agent fell back to deterministic engine:")
-            print(f"Details: {report.summary}")
+            if "quota" in report.summary.lower():
+                print("LIVE GEMINI INFERENCE BLOCKED — External API Quota Exhausted (HTTP 429)")
+                print("Notice: Gemini quota exhausted — deterministic safety fallback activated.")
+                print(f"Summary: {report.summary}")
+            else:
+                print("LIVE GEMINI INFERENCE FAILED — Safety Fallback Activated:")
+                print(f"Summary: {report.summary}")
             print("!" * 70)
             return {
                 "gemini_live_succeeded": False,
