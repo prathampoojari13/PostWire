@@ -31,11 +31,31 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="h-16 w-full px-space-xl flex items-center justify-between gap-space-lg">
         <div className="flex items-center gap-space-lg">
           <div className="flex items-center gap-space-md">
-            <img
-              alt="PostWire Logo"
-              className="h-8 w-auto object-contain"
-              src="https://lh3.googleusercontent.com/aida/AEtjO1Uu13m0R4VEUB-R1rNWgy1V0Si-LJopvvNCRONEoUdRbiTapAcsMLduc0zbBpunL0lSDG8KqAenUq9lEiwKZebe1qjWaBcRXPd3WFkpJuw7CuPyfCxd98MOYe7aPNDzwHgpm-DBWwBmaCrKhTOow0tW_LvcUzO0wcwG5S7VgiI9XIaWRY0BpGqLfWU85X2xZMSslSDkUAzmN0Df0yBuUvwY1W4o-QASBPCAUZW2M-iGGtS1ZpwF2BicvzSf"
-            />
+            <div className="h-8 w-8 shrink-0 rounded bg-gradient-to-br from-surface-container-high to-surface-container-lowest border border-primary-container/40 flex items-center justify-center shadow-sm">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-5 h-5"
+                aria-label="PostWire Logo"
+              >
+                <path
+                  d="M4 17V7C4 5.34315 5.34315 4 7 4H13C15.2091 4 17 5.79086 17 8C17 10.2091 15.2091 12 13 12H7"
+                  stroke="#ffb690"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M13 12L19 20"
+                  stroke="#f97316"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+                <circle cx="19" cy="6" r="2" fill="#7bd0ff" />
+                <circle cx="4" cy="18" r="1.5" fill="#f97316" />
+              </svg>
+            </div>
             <div className="flex flex-col">
               <div className="flex items-center gap-space-sm">
                 <span className="font-headline-lg text-headline-lg font-bold tracking-tight text-on-background">
