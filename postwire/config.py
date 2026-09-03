@@ -29,7 +29,11 @@ class Settings(BaseSettings):
 
     # Google Cloud / Gemini AI
     gemini_api_key: str | None = Field(default=None, description="Google Gemini API key")
+    google_api_key: str | None = Field(default=None, description="Google API key alternative")
     gemini_model: str = Field(default="gemini-2.5-flash", description="Configurable Gemini model version")
+    google_cloud_project: str | None = Field(default=None, description="Google Cloud Project ID for Vertex AI ADC")
+    google_cloud_location: str = Field(default="us-central1", description="Google Cloud region for Vertex AI")
+    google_genai_use_vertexai: bool = Field(default=False, description="Set to true to use Google Cloud Vertex AI ADC")
 
     # Grafana MCP Integration
     postwire_grafana_mode: Literal["mock", "live"] = Field(
@@ -79,9 +83,16 @@ class Settings(BaseSettings):
             self.postwire_grafana_mode = self.grafana_mcp_mode
 
         ai_env = os.getenv("POSTWIRE_AI_MODE")
+        has_ai_creds = bool(
+            self.gemini_api_key
+            or self.google_api_key
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+            or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        )
         if ai_env in ("google_adk", "offline"):
             self.postwire_ai_mode = ai_env  # type: ignore
-        elif (self.gemini_api_key or os.getenv("GOOGLE_API_KEY")) and ai_env != "offline":
+        elif has_ai_creds and ai_env != "offline":
             self.postwire_ai_mode = "google_adk"
 
         return self

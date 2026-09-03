@@ -75,6 +75,16 @@ async def run_live_gemini_verification():
             telemetry_points=points,
         )
 
+        if "Fallback to deterministic engine" in report.summary:
+            print("\n" + "!" * 70)
+            print("LIVE GEMINI INFERENCE FAILED — Agent fell back to deterministic engine:")
+            print(f"Details: {report.summary}")
+            print("!" * 70)
+            return {
+                "gemini_live_succeeded": False,
+                "error": report.summary,
+            }
+
         print("\n" + "=" * 70)
         print("LIVE GEMINI INVESTIGATION RESULT:")
         print("=" * 70)

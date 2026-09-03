@@ -227,9 +227,17 @@ class GoogleADKCommanderRuntime(AgentRuntimeInterface):
 
     def __init__(self, model_name: Optional[str] = None):
         self.model_name = model_name or settings.gemini_model
-        # Ensure API key is accessible to Google GenAI SDK if present in settings
+        # Ensure credentials are accessible to official Google GenAI / ADK SDK
         if settings.gemini_api_key and "GEMINI_API_KEY" not in os.environ:
             os.environ["GEMINI_API_KEY"] = settings.gemini_api_key
+        if settings.google_api_key and "GOOGLE_API_KEY" not in os.environ:
+            os.environ["GOOGLE_API_KEY"] = settings.google_api_key
+        if settings.google_genai_use_vertexai:
+            os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        if settings.google_cloud_project and "GOOGLE_CLOUD_PROJECT" not in os.environ:
+            os.environ["GOOGLE_CLOUD_PROJECT"] = settings.google_cloud_project
+        if settings.google_cloud_location and "GOOGLE_CLOUD_LOCATION" not in os.environ:
+            os.environ["GOOGLE_CLOUD_LOCATION"] = settings.google_cloud_location
 
     @property
     def runtime_name(self) -> str:
@@ -357,7 +365,13 @@ class GoogleADKCommanderRuntime(AgentRuntimeInterface):
 def get_agent_runtime() -> AgentRuntimeInterface:
     """Factory returning configured Agent Runtime based on POSTWIRE_AI_MODE."""
     mode = settings.postwire_ai_mode
-    has_creds = bool(settings.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+    has_creds = bool(
+        settings.gemini_api_key
+        or settings.google_api_key
+        or os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    )
 
     if mode == "google_adk" and has_creds:
         logger.info("Using real Google ADK + Gemini Agent runtime (%s).", settings.gemini_model)
@@ -365,7 +379,7 @@ def get_agent_runtime() -> AgentRuntimeInterface:
 
     if mode == "google_adk" and not has_creds:
         logger.warning(
-            "POSTWIRE_AI_MODE is 'google_adk' but GEMINI_API_KEY is not set. "
+            "POSTWIRE_AI_MODE is 'google_adk' but no Google Cloud / Gemini credentials are set. "
             "Falling back to Deterministic Commander runtime."
         )
         return DeterministicCommanderRuntime()
