@@ -72,14 +72,88 @@ Rather than daisy-chaining multiple slow agents, PostWire uses **one unified Aut
 
 ---
 
-## Grafana MCP Integration
+---
 
-Grafana MCP is a **core runtime dependency** for the final hackathon submission.
+## Real Grafana MCP Integration
 
-| Mode | Environment | Description |
-|---|---|---|
-| `mock` | Local Dev & CI Tests | Deterministic mock adapter simulating official Grafana MCP tool responses (`query_prometheus`, `query_loki`, `list_alerts`) mapped to scenario telemetry. **Zero fake claims: labeled as mock.** |
-| `live` | Hackathon Demo / Staging | Real client connecting via standard MCP JSON-RPC protocol to the official `@grafana/mcp-grafana` server backed by Grafana Cloud (Prometheus + Loki). |
+Grafana MCP is a **core runtime integration** in PostWire. Rather than using arbitrary custom HTTP endpoints or mocks in production, PostWire connects to the **official Grafana MCP server (`mcp-grafana`)** over the standard Model Context Protocol (MCP) using **standard I/O (`stdio`) JSON-RPC transport**.
+
+### Architecture
+
+```
++-------------------------------------------------------------------------+
+|                           PostWire Commander                            |
++-------------------------------------------------------------------------+
+                                    │ (Python MCP ClientSession)
+                                    ▼ [stdio JSON-RPC]
++-------------------------------------------------------------------------+
+|                  Official Grafana MCP Server (mcp-grafana)              |
++-------------------------------------------------------------------------+
+                                    │ (Grafana HTTP API / Datasource Proxy)
+                                    ▼
++-------------------------------------------------------------------------+
+|                  Grafana Cloud / Self-Hosted Grafana                    |
+|   ├── Prometheus (Mimir): Edge Ingress RPS, Cache Hit Ratio, 5xx Rates  |
+|   └── Loki: Application & Edge Proxy Access Logs, Error Signatures      |
++-------------------------------------------------------------------------+
+```
+
+### Installation of `mcp-grafana`
+
+The official Grafana MCP server is maintained at [grafana/mcp-grafana](https://github.com/grafana/mcp-grafana). You can install or run it via:
+
+1. **Pre-built binary / Go install:**
+   ```bash
+   go install github.com/grafana/mcp-grafana@latest
+   ```
+2. **Docker container:**
+   ```bash
+   docker pull grafana/mcp-grafana:latest
+   ```
+3. **uvx / Python runner:**
+   ```bash
+   uvx mcp-grafana
+   ```
+
+### Configuration & Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `POSTWIRE_GRAFANA_MODE` | No | `mock` | `mock` for local dev/testing; `live` for connecting to the official `mcp-grafana` server |
+| `GRAFANA_URL` | If `live` | `http://localhost:3000` | URL of your Grafana Cloud stack (e.g. `https://<org>.grafana.net`) |
+| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | If `live` | *None* | Grafana Service Account token (format: `glsa_...`) with `Viewer` role |
+| `GRAFANA_MCP_COMMAND` | No | `mcp-grafana` | Command to launch official server (e.g. `mcp-grafana` or `docker run -i --rm -e GRAFANA_URL -e GRAFANA_SERVICE_ACCOUNT_TOKEN grafana/mcp-grafana`) |
+| `POSTWIRE_RUN_GRAFANA_INTEGRATION`| No | `false` | Set to `true` to execute live end-to-end integration tests against real Grafana Cloud |
+
+### Mode Comparison
+
+| Mode | Telemetry Source | Use Case | Guarantees |
+|---|---|---|---|
+| **Mock Mode** (`mock`) | Synthetic Scenario Matrix | Local dev, automated CI, regression tests | Zero external credentials needed; 100% deterministic test execution. |
+| **Live Mode** (`live`) | Real Grafana Cloud via `mcp-grafana` stdio | Hackathon staging & live demo | Real MCP JSON-RPC protocol; actual PromQL & LogQL query execution. |
+
+### Verifying the MCP Connection
+
+1. **Test Tool Discovery Endpoint:**
+   ```bash
+   curl -s http://localhost:8000/api/mcp/tools
+   ```
+   *Returns the list of tools discovered from the active Grafana MCP adapter (`query_prometheus`, `query_loki`, `list_alerts`).*
+
+2. **Execute Direct PromQL Query via MCP:**
+   ```bash
+   curl -X POST http://localhost:8000/api/mcp/query \
+     -H "Content-Type: application/json" \
+     -d '{"query_type": "prometheus", "query": "sum(rate(http_requests_total[5m]))"}'
+   ```
+
+3. **Run Live Integration Test (when Grafana Cloud credentials are configured):**
+   ```bash
+   POSTWIRE_RUN_GRAFANA_INTEGRATION=true \
+   GRAFANA_URL="https://your-stack.grafana.net" \
+   GRAFANA_SERVICE_ACCOUNT_TOKEN="glsa_..." \
+   python -m pytest tests/test_grafana_mcp.py -k test_live_grafana_cloud_mcp_integration -v
+   ```
 
 ---
 

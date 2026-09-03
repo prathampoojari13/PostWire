@@ -4,7 +4,7 @@ Mock Grafana MCP Client.
 STRICT USAGE NOTICE:
 This mock adapter is ONLY for local development and deterministic automated tests.
 It provides simulated Prometheus PromQL and Loki LogQL responses matching the active scenario.
-In production/hackathon final deployment, GRAFANA_MCP_MODE=live must be used with the official Grafana MCP server.
+In production/hackathon final deployment, POSTWIRE_GRAFANA_MODE=live must be used with the official Grafana MCP server.
 """
 
 from datetime import datetime, timezone
@@ -29,6 +29,40 @@ class MockGrafanaMCPClient(GrafanaMCPClientInterface):
     def set_telemetry(self, points: List[TelemetryPoint]) -> None:
         """Update active telemetry context for simulated Prometheus/Loki responses."""
         self._points = points
+
+    async def discover_tools(self) -> List[Dict[str, Any]]:
+        """List simulated MCP tools available in mock mode."""
+        return [
+            {
+                "name": "query_prometheus",
+                "description": "Execute PromQL queries against Prometheus datasource",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "time_range": {"type": "string"}
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "query_loki",
+                "description": "Execute LogQL queries against Loki datasource",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "limit": {"type": "integer"}
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "list_alerts",
+                "description": "Retrieve active Grafana alerting rules",
+                "inputSchema": {"type": "object"}
+            }
+        ]
 
     async def query_prometheus(self, query: str, time_range: str = "5m") -> Dict[str, Any]:
         """
@@ -58,7 +92,6 @@ class MockGrafanaMCPClient(GrafanaMCPClientInterface):
             })
 
         elif "drm" in q_lower or "license" in q_lower:
-            # Regional breakdown if available
             regions_seen = set(p.region for p in self._points) if self._points else []
             for r in regions_seen:
                 r_pts = [p for p in self._points if p.region == r]
@@ -91,7 +124,6 @@ class MockGrafanaMCPClient(GrafanaMCPClientInterface):
                 })
 
         else:
-            # Generic aggregate fallback
             results.append({
                 "metric": {"query": query, "datasource": "mock_prometheus"},
                 "value": [now, "1.0"]

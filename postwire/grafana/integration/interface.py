@@ -38,3 +38,10 @@ class GrafanaMCPClientInterface(ABC):
         Retrieves active Grafana Alerting rules and firing incidents.
         """
         pass
+
+    @abstractmethod
+    async def discover_tools(self) -> List[Dict[str, Any]]:
+        """
+        Discovers available tools exposed by the MCP server.
+        """
+        pass

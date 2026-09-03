@@ -23,7 +23,7 @@ from postwire.telemetry.scenarios import (
 app = FastAPI(
     title="PostWire — Autonomous Streaming Release Incident Commander",
     description="Autonomous incident commander correlating movie release context, viewer QoE, and Grafana MCP telemetry.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 commander = PostWireCommander()
@@ -46,17 +46,44 @@ class InvestigationResponse(BaseModel):
     report: IncidentReport
 
 
+class MCPQueryRequest(BaseModel):
+    query_type: str = "prometheus"  # "prometheus" or "loki"
+    query: str
+    time_range_or_limit: str = "5m"
+
+
 @app.get("/health")
 async def health_check() -> Dict[str, Any]:
     """Service health and active integration statuses."""
     return {
         "status": "healthy",
         "service": "PostWire Incident Commander",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "gemini_model": settings.gemini_model,
-        "grafana_mcp_mode": settings.grafana_mcp_mode,
+        "postwire_grafana_mode": settings.postwire_grafana_mode,
+        "grafana_mcp_mode": settings.postwire_grafana_mode,
+        "grafana_mcp_command": settings.grafana_mcp_command,
+        "grafana_mcp_active_mode": commander.mcp_client.mode,
         "environment": settings.environment,
     }
+
+
+@app.get("/api/mcp/tools")
+async def list_mcp_tools() -> List[Dict[str, Any]]:
+    """List tools discovered from the active Grafana MCP adapter."""
+    return await commander.grafana_tools.discover_tools()
+
+
+@app.post("/api/mcp/query")
+async def query_mcp_raw(req: MCPQueryRequest) -> Any:
+    """Directly query Prometheus or Loki through the active Grafana MCP client."""
+    if req.query_type == "prometheus":
+        return await commander.grafana_tools.query_grafana_metrics(req.query, req.time_range_or_limit)
+    elif req.query_type == "loki":
+        limit = int(req.time_range_or_limit) if req.time_range_or_limit.isdigit() else 50
+        return await commander.grafana_tools.query_grafana_logs(req.query, limit=limit)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid query_type. Use 'prometheus' or 'loki'.")
 
 
 @app.get("/api/scenarios", response_model=List[ScenarioSummary])
