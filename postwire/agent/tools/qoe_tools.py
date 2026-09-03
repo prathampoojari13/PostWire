@@ -63,7 +63,7 @@ class QoEInvestigationTools:
             region=reg_enum,
             device_type=dev_enum
         )
-        return agg.model_dump()
+        return agg.model_dump(mode="json")
 
     async def scan_anomalous_viewer_slices(
         self,

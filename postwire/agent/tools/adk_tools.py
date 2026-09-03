@@ -1,12 +1,29 @@
 """
 Google ADK Compatible Toolset for PostWire Incident Commander.
 Binds cinema release context, viewer QoE analytics, and real Grafana MCP tools.
+Ensures all returned data structures are strictly JSON serializable (converting datetime to ISO-8601).
 """
 
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from postwire.agent.tools.grafana_mcp_tools import GrafanaMCPTools
 from postwire.agent.tools.qoe_tools import QoEInvestigationTools
 from postwire.telemetry.models import InvestigationStep
+
+
+def make_json_serializable(data: Any) -> Any:
+    """
+    Recursively converts datetime objects to ISO-8601 strings and ensures
+    all elements in dicts, lists, and sets are standard JSON serializable.
+    Preserves field names such as 'timestamp' without alteration.
+    """
+    if isinstance(data, (datetime, date)):
+        return data.isoformat()
+    if isinstance(data, dict):
+        return {k: make_json_serializable(v) for k, v in data.items()}
+    if isinstance(data, (list, tuple, set)):
+        return [make_json_serializable(x) for x in data]
+    return data
 
 
 class PostWireADKToolset:
@@ -44,7 +61,7 @@ class PostWireADKToolset:
             f"Target devices: {', '.join(context.get('high_value_devices', []))}"
         )
         self._record_step("get_release_context", f"Release context for {context.get('release_id')}", evidence)
-        return context
+        return make_json_serializable(context)
 
     async def inspect_viewer_qoe(
         self,
@@ -67,11 +84,12 @@ class PostWireADKToolset:
         query_desc = f"QoE aggregate (region={region or 'all'}, device={device_type or 'all'})"
         self._record_step("inspect_viewer_qoe", query_desc, evidence)
 
-        return {
+        result = {
             "aggregate_qoe": agg,
             "anomalous_slices": anomalies,
             "has_critical_qoe_degradation": len(anomalies) > 0 or agg.get("viewer_impact_score", 0.0) > 30.0,
         }
+        return make_json_serializable(result)
 
     async def query_grafana_prometheus(
         self,
@@ -90,7 +108,7 @@ class PostWireADKToolset:
                 val = str(r[0]["value"][1])
         evidence = f"PromQL query '{query}' returned value: {val} via official Grafana MCP"
         self._record_step("query_grafana_prometheus", f"PromQL: {query}", evidence)
-        return res
+        return make_json_serializable(res)
 
     async def query_grafana_loki(
         self,
@@ -106,7 +124,7 @@ class PostWireADKToolset:
         first_line = logs[0].get("line", "") if logs and isinstance(logs[0], dict) else ""
         evidence = f"Loki LogQL query '{logql_query}' returned {count} log entries. Sample: {first_line[:90]}"
         self._record_step("query_grafana_loki", f"LogQL: {logql_query}", evidence)
-        return logs
+        return make_json_serializable(logs)
 
     async def list_grafana_alerts(self) -> List[Dict[str, Any]]:
         """
@@ -116,7 +134,7 @@ class PostWireADKToolset:
         count = len(alerts)
         evidence = f"Grafana Alerting returned {count} active alert groups."
         self._record_step("list_grafana_alerts", "Active alert rules query", evidence)
-        return alerts
+        return make_json_serializable(alerts)
 
     def get_tool_callables(self) -> List[Any]:
         """Returns the list of ADK-compatible tool functions."""

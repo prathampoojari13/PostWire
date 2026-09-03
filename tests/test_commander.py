@@ -200,6 +200,58 @@ def test_runtime_selection_mechanism(monkeypatch):
     assert isinstance(runtime_adk, GoogleADKCommanderRuntime)
 
 
+@pytest.mark.asyncio
+async def test_all_adk_tool_responses_are_json_serializable():
+    """
+    Regression test: verify every PostWire ADK tool response is strictly JSON serializable.
+    Ensures datetime objects (such as 'timestamp') are serialized to ISO-8601 strings
+    and never cause TypeError in Google ADK serialization flows.
+    """
+    import json
+    mcp_mock = MockGrafanaMCPClient()
+    _, context, points = generate_regional_incident_telemetry()
+    mcp_mock.set_telemetry(points)
+
+    grafana_tools = GrafanaMCPTools(mcp_mock)
+    qoe_tools = QoEInvestigationTools(
+        analytics=ViewerQoEAnalytics(),
+        release_context=context,
+        telemetry_points=points,
+    )
+    toolset = PostWireADKToolset(grafana_tools=grafana_tools, qoe_tools=qoe_tools)
+
+    # 1. get_release_context
+    ctx = await toolset.get_release_context()
+    dumped_ctx = json.dumps(ctx)
+    assert isinstance(json.loads(dumped_ctx), dict)
+    assert isinstance(ctx["premiere_window_start"], str)
+
+    # 2. inspect_viewer_qoe (contains aggregate_qoe with 'timestamp')
+    qoe = await toolset.inspect_viewer_qoe()
+    dumped_qoe = json.dumps(qoe)
+    loaded_qoe = json.loads(dumped_qoe)
+    assert isinstance(loaded_qoe, dict)
+    # Verify timestamp is serialized to ISO string, not a raw datetime object
+    assert "timestamp" in qoe["aggregate_qoe"]
+    assert isinstance(qoe["aggregate_qoe"]["timestamp"], str)
+    assert "T" in qoe["aggregate_qoe"]["timestamp"] or len(qoe["aggregate_qoe"]["timestamp"]) >= 10
+
+    # 3. query_grafana_prometheus
+    prom = await toolset.query_grafana_prometheus("up")
+    dumped_prom = json.dumps(prom)
+    assert isinstance(json.loads(dumped_prom), dict)
+
+    # 4. query_grafana_loki
+    loki = await toolset.query_grafana_loki('{app="drm"}')
+    dumped_loki = json.dumps(loki)
+    assert isinstance(json.loads(dumped_loki), list)
+
+    # 5. list_grafana_alerts
+    alerts = await toolset.list_grafana_alerts()
+    dumped_alerts = json.dumps(alerts)
+    assert isinstance(json.loads(dumped_alerts), list)
+
+
 def context_ts():
     from datetime import datetime, timezone
     return datetime.now(timezone.utc)
