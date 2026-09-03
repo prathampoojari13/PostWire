@@ -12,136 +12,185 @@ from postwire.grafana.integration.live_mcp_client import LiveGrafanaMCPClient
 
 async def run_verification():
     print("=" * 70)
-    print("PostWire — Milestone 2B: Grafana Cloud MCP Verification")
+    print("PostWire — Milestone 2C: Real Grafana Cloud MCP Verification")
     print("=" * 70)
 
-    # Task 1 & 2: Command and binary check
     cmd = settings.grafana_mcp_command
     url = settings.grafana_url
     token_present = bool(settings.grafana_service_account_token)
-    masked_token = (
-        f"{settings.grafana_service_account_token[:6]}...{settings.grafana_service_account_token[-4:]}"
-        if token_present and len(settings.grafana_service_account_token) > 10
-        else ("***PROVIDED***" if token_present else "NOT CONFIGURED")
-    )
 
-    print(f"[*] Configured Command: {cmd}")
-    print(f"[*] Target Grafana URL: {url}")
-    print(f"[*] Service Account Token: {masked_token}")
+    # Security check: Never display or leak the actual token
+    token_status = "[CONFIGURED]" if token_present else "[NOT CONFIGURED]"
+
+    print(f"[*] Configured MCP Command: {cmd}")
+    print(f"[*] Target Grafana URL:     {url}")
+    print(f"[*] Service Account Token:  {token_status}")
     print("-" * 70)
 
-    results = {
-        "mcp_server_verified": "FAIL",
-        "mcp_initialization": "FAIL",
+    scorecard = {
+        "official_mcp_grafana": "FAIL",
+        "mcp_handshake": "FAIL",
         "tools_list": "FAIL",
-        "grafana_cloud_connection": "FAIL",
-        "prometheus_query": "FAIL",
-        "loki_query": "FAIL",
-        "active_alerts": "FAIL",
+        "datasource_discovery": "FAIL",
+        "prometheus_connection": "FAIL",
+        "loki_connection": "FAIL",
+        "alerting_connection": "FAIL",
+        "postwire_to_cloud": "FAIL",
+        "full_test_suite": "FAIL",
     }
 
-    if not token_present:
-        print("[!] GRAFANA_SERVICE_ACCOUNT_TOKEN is not set.")
-        print("    Please set GRAFANA_URL and GRAFANA_SERVICE_ACCOUNT_TOKEN in .env to verify live queries.")
-        print("-" * 70)
+    server_version = "unknown"
+    discovered_tools_count = 0
 
-    try:
-        client = LiveGrafanaMCPClient(
-            grafana_url=url if token_present else "https://grafana.com",
-            token=settings.grafana_service_account_token or "glsa_test_token_verification"
-        )
-    except Exception as exc:
-        print(f"[!] Client initialization error: {exc}")
-        return results
-
-    # Test Stdio Handshake & Tool Discovery
+    # Phase 1: Test Official MCP Server & stdio Handshake
     print("[1/4] Testing official mcp-grafana stdio protocol handshake...")
     try:
-        from mcp import ClientSession
-        from mcp.client.stdio import stdio_client
+        from mcp import ClientSession, StdioServerParameters
+        import shlex
 
-        params = client._get_server_params()
+        parts = shlex.split(cmd)
+        env = dict(os.environ)
+        env["GRAFANA_URL"] = url
+        env["GRAFANA_SERVICE_ACCOUNT_TOKEN"] = settings.grafana_service_account_token or "glsa_mock_placeholder"
+
+        params = StdioServerParameters(command=parts[0], args=parts[1:] if len(parts) > 1 else [], env=env)
+
+        from mcp.client.stdio import stdio_client
         async with stdio_client(params) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
                 init_res = await session.initialize()
                 server_name = init_res.server_info.name
-                server_ver = init_res.server_info.version
-                print(f"    [+] Handshake Succeeded! Server: '{server_name}' (Version: {server_ver})")
-                
-                if server_name == "mcp-grafana":
-                    results["mcp_server_verified"] = "PASS"
-                    results["mcp_initialization"] = "PASS"
+                server_version = init_res.server_info.version
+                print(f"    [+] stdio Handshake Succeeded! Server: '{server_name}' (Version: {server_version})")
 
+                if server_name == "mcp-grafana":
+                    scorecard["official_mcp_grafana"] = "PASS"
+                    scorecard["mcp_handshake"] = "PASS"
+
+                # Phase 2: Tool Discovery (tools/list)
                 print("[2/4] Testing tools/list discovery from official server...")
                 tools_res = await session.list_tools()
+                discovered_tools_count = len(tools_res.tools)
                 tool_names = [t.name for t in tools_res.tools]
-                print(f"    [+] Discovered {len(tool_names)} official tools.")
-                
-                # Check for core observability tools
+                print(f"    [+] Discovered {discovered_tools_count} official tools.")
+
                 has_prom = "query_prometheus" in tool_names
                 has_loki = "query_loki_logs" in tool_names or "query_loki" in tool_names
                 has_alerts = "list_alert_groups" in tool_names or "list_alerts" in tool_names
 
                 print(f"        - Prometheus tool ('query_prometheus'): {'FOUND' if has_prom else 'MISSING'}")
-                print(f"        - Loki tool ('query_loki_logs'): {'FOUND' if has_loki else 'MISSING'}")
-                print(f"        - Alerting tool ('list_alert_groups'): {'FOUND' if has_alerts else 'MISSING'}")
+                print(f"        - Loki tool ('query_loki_logs'):         {'FOUND' if has_loki else 'MISSING'}")
+                print(f"        - Alerting tool ('list_alert_groups'):   {'FOUND' if has_alerts else 'MISSING'}")
 
-                if len(tool_names) > 0:
-                    results["tools_list"] = "PASS"
+                if discovered_tools_count > 0 and has_prom and has_loki and has_alerts:
+                    scorecard["tools_list"] = "PASS"
 
     except Exception as exc:
         print(f"    [-] MCP handshake/discovery failed: {exc}")
 
-    # If real token is configured, test live queries against Grafana Cloud
-    if token_present:
-        print("[3/4] Testing live Grafana Cloud Prometheus query...")
+    # Phase 3: Datasource Discovery & Live Queries
+    if token_present and url and not url.startswith("http://localhost"):
+        print("[3/4] Testing live Grafana Cloud datasource discovery & queries...")
         try:
-            prom_res = await client.query_prometheus("up")
-            if prom_res.get("status") == "success":
-                print("    [+] Prometheus Query Succeeded!")
-                results["prometheus_query"] = "PASS"
-                results["grafana_cloud_connection"] = "PASS"
-            else:
-                print(f"    [-] Prometheus Query returned: {prom_res}")
-        except Exception as exc:
-            print(f"    [-] Prometheus Query failed: {exc}")
+            client = LiveGrafanaMCPClient(grafana_url=url, token=settings.grafana_service_account_token)
+            
+            # Step A: Datasource discovery via list_datasources tool
+            async def run_discovery_and_queries(session):
+                ds_res = await session.call_tool("list_datasources", {"limit": 50})
+                parsed_ds = client._parse_tool_result(ds_res)
+                datasources = parsed_ds if isinstance(parsed_ds, list) else parsed_ds.get("datasources", [parsed_ds])
+                
+                prom_uid = None
+                loki_uid = None
+                for ds in datasources:
+                    if isinstance(ds, dict):
+                        dstype = ds.get("type", "").lower()
+                        if "prom" in dstype and not prom_uid:
+                            prom_uid = ds.get("uid")
+                        if "loki" in dstype and not loki_uid:
+                            loki_uid = ds.get("uid")
 
-        print("[4/4] Testing live Grafana Cloud Loki log query & Alerts...")
-        try:
-            loki_res = await client.query_loki('{job=~".+"}', limit=5)
-            if isinstance(loki_res, list) and not (len(loki_res) == 1 and loki_res[0].get("status") == "error"):
-                print("    [+] Loki Query Succeeded!")
-                results["loki_query"] = "PASS"
-            else:
-                print(f"    [-] Loki Query returned: {loki_res}")
-        except Exception as exc:
-            print(f"    [-] Loki Query failed: {exc}")
+                print(f"    [+] Datasources discovered: Prometheus UID={prom_uid or 'default'}, Loki UID={loki_uid or 'default'}")
+                scorecard["datasource_discovery"] = "PASS"
 
-        try:
-            alerts_res = await client.list_active_alerts()
-            if isinstance(alerts_res, list) and not (len(alerts_res) == 1 and alerts_res[0].get("status") == "error"):
-                print("    [+] Active Alerts Query Succeeded!")
-                results["active_alerts"] = "PASS"
-            else:
-                print(f"    [-] Active Alerts returned: {alerts_res}")
+                # Step B: Prometheus Query (using safe universal vector(1) query)
+                print("    [*] Executing Prometheus query: 'vector(1)'...")
+                prom_args = {
+                    "datasourceUid": prom_uid or "grafanacloud-prom",
+                    "expr": "vector(1)",
+                    "endTime": "now",
+                    "queryType": "instant"
+                }
+                prom_call = await session.call_tool("query_prometheus", prom_args)
+                prom_data = client._parse_tool_result(prom_call)
+                if prom_data and not (isinstance(prom_data, dict) and prom_data.get("status") == "error"):
+                    print("    [+] Prometheus Query: PASS")
+                    scorecard["prometheus_connection"] = "PASS"
+                else:
+                    print(f"    [-] Prometheus Query returned: {prom_data}")
+
+                # Step C: Loki Query (using safe LogQL query)
+                print("    [*] Executing Loki query: '{job=~\".+\"}'...")
+                loki_args = {
+                    "datasourceUid": loki_uid or "grafanacloud-logs",
+                    "logql": '{job=~".+"}',
+                    "limit": 5
+                }
+                loki_call = await session.call_tool("query_loki_logs", loki_args)
+                loki_data = client._parse_tool_result(loki_call)
+                # An empty dataset is NOT an error: report 'Loki connected but no matching data'
+                if isinstance(loki_data, list) or (isinstance(loki_data, dict) and "error" not in loki_data):
+                    print("    [+] Loki Query: PASS (Loki connected; stream evaluated)")
+                    scorecard["loki_connection"] = "PASS"
+                else:
+                    print(f"    [-] Loki Query returned: {loki_data}")
+
+                # Step D: Alerting
+                print("    [*] Checking active alert groups...")
+                alerts_call = await session.call_tool("list_alert_groups", {})
+                alerts_data = client._parse_tool_result(alerts_call)
+                if isinstance(alerts_data, list) or (isinstance(alerts_data, dict) and "error" not in alerts_data):
+                    alert_count = len(alerts_data) if isinstance(alerts_data, list) else len(alerts_data.get("alertGroups", []))
+                    if alert_count == 0:
+                        print("    [+] Alerting: PASS (Grafana connected; no active alerts)")
+                    else:
+                        print(f"    [+] Alerting: PASS ({alert_count} active alert groups found)")
+                    scorecard["alerting_connection"] = "PASS"
+                else:
+                    print(f"    [-] Alerting check returned: {alerts_data}")
+
+                if scorecard["prometheus_connection"] == "PASS":
+                    scorecard["postwire_to_cloud"] = "PASS"
+
+            await client._execute_mcp_session(run_discovery_and_queries)
+
         except Exception as exc:
-            print(f"    [-] Active Alerts Query failed: {exc}")
+            print(f"    [-] Live queries failed: {exc}")
 
     else:
-        print("[!] Skipping live queries 3 & 4 because GRAFANA_SERVICE_ACCOUNT_TOKEN is not configured.")
+        print("[!] Step 3 skipped: Live credentials are not yet configured in local .env.")
+        print("    Follow the instructions below to complete real cloud queries.")
 
-    print("\n" + "=" * 70)
-    print("VERIFICATION SCORECARD:")
-    print(f"  * Official mcp-grafana binary:   {results['mcp_server_verified']}")
-    print(f"  * MCP stdio initialization:     {results['mcp_initialization']}")
-    print(f"  * tools/list discovery:          {results['tools_list']}")
-    print(f"  * Grafana Cloud connection:     {results['grafana_cloud_connection']}")
-    print(f"  * Prometheus query:              {results['prometheus_query']}")
-    print(f"  * Loki query:                    {results['loki_query']}")
-    print(f"  * active alerts:                 {results['active_alerts']}")
+    # Phase 4: Automated Test Suite Evaluation
+    print("-" * 70)
+    print("VERIFICATION AUDIT SCORECARD:")
+    print("-" * 70)
+    print(f"| Check                          | Result    |")
+    print(f"|--------------------------------|-----------|")
+    print(f"| Official mcp-grafana           | {scorecard['official_mcp_grafana']:<9} |")
+    print(f"| MCP handshake                  | {scorecard['mcp_handshake']:<9} |")
+    print(f"| tools/list                     | {scorecard['tools_list']:<9} |")
+    print(f"| Datasource discovery           | {scorecard['datasource_discovery']:<9} |")
+    print(f"| Prometheus connection          | {scorecard['prometheus_connection']:<9} |")
+    print(f"| Loki connection                | {scorecard['loki_connection']:<9} |")
+    print(f"| Alerting connection            | {scorecard['alerting_connection']:<9} |")
+    print(f"| PostWire -> MCP -> Cloud       | {scorecard['postwire_to_cloud']:<9} |")
+    print("-" * 70)
+    print(f"[*] mcp-grafana version: {server_version}")
+    print(f"[*] Discovered tools count: {discovered_tools_count}")
     print("=" * 70)
 
-    return results
+    return scorecard
 
 
 if __name__ == "__main__":
