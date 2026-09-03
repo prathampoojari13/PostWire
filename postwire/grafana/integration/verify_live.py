@@ -146,20 +146,22 @@ async def run_verification():
                     print(f"    [-] Loki Query returned: {loki_data}")
 
                 # Step D: Alerting
-                print("    [*] Checking active alert groups...")
-                alerts_call = await session.call_tool("list_alert_groups", {})
+                print("    [*] Checking active alert rules via 'alerting_manage_rules'...")
+                alerts_call = await session.call_tool("alerting_manage_rules", {"operation": "list"})
                 alerts_data = client._parse_tool_result(alerts_call)
-                if isinstance(alerts_data, list) or (isinstance(alerts_data, dict) and "error" not in alerts_data):
-                    alert_count = len(alerts_data) if isinstance(alerts_data, list) else len(alerts_data.get("alertGroups", []))
-                    if alert_count == 0:
-                        print("    [+] Alerting: PASS (Grafana connected; no active alerts)")
-                    else:
-                        print(f"    [+] Alerting: PASS ({alert_count} active alert groups found)")
+                if alerts_data is None or alerts_data == {} or (isinstance(alerts_data, list) and len(alerts_data) == 0):
+                    print("    [+] Alerting: PASS (Grafana connected; no active alerts)")
+                    scorecard["alerting_connection"] = "PASS"
+                elif isinstance(alerts_data, list):
+                    print(f"    [+] Alerting: PASS ({len(alerts_data)} alert rules found)")
+                    scorecard["alerting_connection"] = "PASS"
+                elif isinstance(alerts_data, dict) and "error" not in alerts_data:
+                    print("    [+] Alerting: PASS (Grafana connected; rules inspected)")
                     scorecard["alerting_connection"] = "PASS"
                 else:
                     print(f"    [-] Alerting check returned: {alerts_data}")
 
-                if scorecard["prometheus_connection"] == "PASS":
+                if scorecard["prometheus_connection"] == "PASS" and scorecard["loki_connection"] == "PASS":
                     scorecard["postwire_to_cloud"] = "PASS"
 
             await client._execute_mcp_session(run_discovery_and_queries)

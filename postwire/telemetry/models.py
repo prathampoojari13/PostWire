@@ -108,11 +108,28 @@ class IncidentReport(BaseModel):
     summary: str
     evidence: List[str]
     root_cause_hypothesis: Optional[str] = None
-    viewer_impact_summary: str
+    viewer_impact_summary: str = Field(default="")
     recommended_mitigation: str = Field(
         description="Recommended operational mitigation. Explicitly designated as SIMULATED."
     )
+    affected_region: Optional[str] = None
+    affected_device: Optional[str] = None
+    viewer_impact_score: float = Field(default=0.0, ge=0.0, le=100.0)
     investigation_steps: List[InvestigationStep] = Field(
         default_factory=list,
         description="Chronological steps taken during the investigation loop"
     )
+
+    @property
+    def incident_classification(self) -> IncidentClassification:
+        """Alias for classification."""
+        return self.classification
+
+    @property
+    def recommended_action(self) -> str:
+        """Alias for recommended_mitigation."""
+        return self.recommended_mitigation
+
+
+# Alias for ADK / Decision naming
+IncidentDecision = IncidentReport

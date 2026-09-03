@@ -50,6 +50,7 @@ class PostWireCommander:
         """
         logger.info("Commander activated by alert: %s", alert_event)
         logger.info("Release context: %s (%s)", release_context.title, release_context.marketing_tier)
+        logger.info("Commander AI runtime: %s", self.runtime.runtime_name)
         logger.info("Grafana MCP runtime mode: %s", self.mcp_client.mode)
 
         # If mock client is in use for local dev, synchronize its simulated telemetry with the current dataset

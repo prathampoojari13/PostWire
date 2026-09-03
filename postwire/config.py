@@ -62,15 +62,27 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, description="HTTP server port")
     host: str = Field(default="0.0.0.0", description="HTTP server host")
 
+    # AI Engine Mode
+    postwire_ai_mode: Literal["google_adk", "offline"] = Field(
+        default="offline",
+        description="AI mode: 'google_adk' for real Google ADK + Gemini; 'offline' for deterministic test engine"
+    )
+
     @model_validator(mode="after")
     def sync_mode(self) -> "Settings":
-        """Synchronize POSTWIRE_GRAFANA_MODE and GRAFANA_MCP_MODE."""
+        """Synchronize mode flags with environment variables."""
         env_mode = os.getenv("POSTWIRE_GRAFANA_MODE") or os.getenv("GRAFANA_MCP_MODE")
         if env_mode in ("mock", "live"):
             self.postwire_grafana_mode = env_mode  # type: ignore
 
         if self.grafana_mcp_mode and not os.getenv("POSTWIRE_GRAFANA_MODE"):
             self.postwire_grafana_mode = self.grafana_mcp_mode
+
+        ai_env = os.getenv("POSTWIRE_AI_MODE")
+        if ai_env in ("google_adk", "offline"):
+            self.postwire_ai_mode = ai_env  # type: ignore
+        elif (self.gemini_api_key or os.getenv("GOOGLE_API_KEY")) and ai_env != "offline":
+            self.postwire_ai_mode = "google_adk"
 
         return self
 

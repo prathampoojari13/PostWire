@@ -18,6 +18,9 @@ from postwire.grafana.integration.interface import GrafanaMCPClientInterface
 logger = logging.getLogger(__name__)
 
 
+_UNSET = object()
+
+
 class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
     """
     Client connecting to the official Grafana mcp-grafana server over stdio MCP transport.
@@ -26,15 +29,22 @@ class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
 
     def __init__(
         self,
-        grafana_url: Optional[str] = None,
-        token: Optional[str] = None,
+        grafana_url: Any = _UNSET,
+        token: Any = _UNSET,
         command: Optional[str] = None,
         prometheus_uid: Optional[str] = None,
         loki_uid: Optional[str] = None,
     ):
-        raw_url = grafana_url if grafana_url is not None else settings.grafana_url
-        self.grafana_url = raw_url.rstrip("/") if raw_url else ""
-        self.token = token if token is not None else settings.grafana_service_account_token
+        if grafana_url is not _UNSET:
+            self.grafana_url = (grafana_url or "").rstrip("/")
+        else:
+            self.grafana_url = (settings.grafana_url or "").rstrip("/")
+
+        if token is not _UNSET:
+            self.token = token
+        else:
+            self.token = settings.grafana_service_account_token
+
         self.command = command or settings.grafana_mcp_command
         self.prometheus_uid = prometheus_uid or settings.grafana_prometheus_uid
         self.loki_uid = loki_uid or settings.grafana_loki_uid
@@ -252,20 +262,35 @@ class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
 
     async def list_active_alerts(self, filter_labels: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         """
-        Retrieves active alerts using official mcp-grafana tool 'list_alert_groups'.
+        Retrieves active alerts using official mcp-grafana tool 'alerting_manage_rules' or 'list_alert_groups'.
         """
         async def run_alerts(session):
+            try:
+                res = await session.call_tool("alerting_manage_rules", {"operation": "list"})
+                parsed = self._parse_tool_result(res)
+                if parsed is None or parsed == {}:
+                    return []
+                if isinstance(parsed, list):
+                    return parsed
+                if isinstance(parsed, dict) and "error" not in parsed:
+                    return [parsed]
+            except Exception as e:
+                logger.debug("alerting_manage_rules failed (%s), trying list_alert_groups", e)
+
             tool_args = {}
             if filter_labels:
                 tool_args["labels"] = [f"{k}:{v}" for k, v in filter_labels.items()]
 
             res = await session.call_tool("list_alert_groups", tool_args)
-            return self._parse_tool_result(res)
+            parsed = self._parse_tool_result(res)
+            if parsed is None or parsed == {}:
+                return []
+            return parsed if isinstance(parsed, list) else [parsed]
 
-        raw = await self._execute_mcp_session(run_alerts)
+        raw = await self._execute_mcp_session(run_alerts, timeout_seconds=15.0)
         if isinstance(raw, dict) and raw.get("status") == "error":
             return [raw]
 
         if isinstance(raw, list):
             return raw
-        return [raw]
+        return [] if raw is None else [raw]

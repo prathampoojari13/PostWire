@@ -60,6 +60,8 @@ async def health_check() -> Dict[str, Any]:
         "service": "PostWire Incident Commander",
         "version": "0.2.0",
         "gemini_model": settings.gemini_model,
+        "postwire_ai_mode": settings.postwire_ai_mode,
+        "commander_ai_runtime": commander.runtime.runtime_name,
         "postwire_grafana_mode": settings.postwire_grafana_mode,
         "grafana_mcp_mode": settings.postwire_grafana_mode,
         "grafana_mcp_command": settings.grafana_mcp_command,
