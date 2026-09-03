@@ -25,7 +25,6 @@ export const Header: React.FC<HeaderProps> = ({
   onReInvestigate,
 }) => {
   const isCritical = report?.classification === "CRITICAL_STREAMING_INCIDENT";
-  const isFallback = report?.summary.includes("Fallback") || report?.summary.includes("fallback");
 
   return (
     <header className="fixed top-0 left-0 right-0 h-16 z-50 bg-surface-container-lowest/90 backdrop-blur-xl border-b border-surface-container-high">
@@ -140,22 +139,36 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center gap-space-xs px-space-sm py-space-2xs bg-surface-container rounded border border-surface-container-high">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isFallback ? "bg-primary-container animate-pulse" : "bg-tertiary-container animate-ping"
-                }`}
-              ></span>
-              <span className="text-on-surface-variant">
-                {isFallback ? "SAFETY FALLBACK:" : "GEMINI ADK:"}
-              </span>
-              <span
-                className={`font-semibold ${isFallback ? "text-primary" : "text-tertiary"}`}
-                title={report?.summary || ""}
-              >
-                {isFallback ? "DETERMINISTIC" : health?.gemini_model || "ACTIVE"}
-              </span>
-            </div>
+            {(() => {
+              const isOffline = health?.postwire_ai_mode === "offline";
+              const isFallback =
+                report?.summary.toLowerCase().includes("fallback") ||
+                report?.summary.toLowerCase().includes("quota");
+
+              let statusText = "GOOGLE ADK + GEMINI";
+              let dotClass = "bg-tertiary-container animate-ping";
+              let textClass = "text-tertiary";
+
+              if (isOffline) {
+                statusText = "DETERMINISTIC ENGINE";
+                dotClass = "bg-surface-bright";
+                textClass = "text-on-surface";
+              } else if (isFallback) {
+                statusText = "GOOGLE ADK + SAFETY FALLBACK";
+                dotClass = "bg-primary-container animate-pulse";
+                textClass = "text-primary";
+              }
+
+              return (
+                <div className="flex items-center gap-space-xs px-space-sm py-space-2xs bg-surface-container rounded border border-surface-container-high">
+                  <span className={`w-2 h-2 rounded-full ${dotClass}`}></span>
+                  <span className="text-on-surface-variant">AI RUNTIME:</span>
+                  <span className={`font-semibold ${textClass}`} title={report?.summary || ""}>
+                    {statusText}
+                  </span>
+                </div>
+              );
+            })()}
 
             <div className="flex items-center gap-space-xs px-space-sm py-space-2xs bg-surface-container-lowest rounded border border-outline-variant/30 text-outline">
               <span className="material-symbols-outlined text-[13px]">dns</span>

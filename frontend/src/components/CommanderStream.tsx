@@ -117,7 +117,7 @@ export const CommanderStream: React.FC<CommanderStreamProps> = ({ report, health
             </span>
             <span className="font-body-xs text-body-xs text-tertiary flex items-center gap-space-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-ping"></span>
-              Powered by {health?.gemini_model || "Google Gemini 2.5 Pro"} &amp; Agent Development Kit (ADK)
+              Powered by Google ADK &amp; {health?.gemini_model || "Gemini"}
             </span>
           </div>
         </div>
