@@ -67,3 +67,72 @@ async def test_mcp_raw_query_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_cors_headers():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.options(
+            "/health",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "GET",
+            }
+        )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") in ["http://localhost:5173", "*"]
+
+
+@pytest.mark.asyncio
+async def test_regional_breakdown_endpoint():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Test regional incident scenario
+        res = await ac.get("/api/scenarios/regional_streaming_incident/regional-breakdown")
+        assert res.status_code == 200
+        data = res.json()
+        assert isinstance(data, list)
+        assert len(data) >= 3
+        # Check apac-south is identified as CRITICAL in this scenario
+        apac = next((r for r in data if r["region"] == "apac-south"), None)
+        assert apac is not None
+        assert apac["status"] == "CRITICAL"
+        assert apac["playback_failure_rate"] > 0.02
+        assert apac["drm_license_latency_ms"] > 200.0
+
+        # Test normal premiere surge scenario (all healthy)
+        res_normal = await ac.get("/api/scenarios/normal_movie_premiere/regional-breakdown")
+        assert res_normal.status_code == 200
+        normal_data = res_normal.json()
+        for reg in normal_data:
+            assert reg["status"] == "HEALTHY"
+
+
+@pytest.mark.asyncio
+async def test_investigate_includes_regional_breakdown():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        res = await ac.post("/api/scenarios/regional_streaming_incident/investigate")
+        assert res.status_code == 200
+        data = res.json()
+        assert "regional_breakdown" in data
+        assert len(data["regional_breakdown"]) >= 3
+
+
+@pytest.mark.asyncio
+async def test_simulation_action_endpoint_never_claims_execution():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        res = await ac.post("/api/actions/simulate", json={
+            "scenario_id": "regional_streaming_incident",
+            "action_type": "drm_failover"
+        })
+        assert res.status_code == 200
+        data = res.json()
+        # Safety assertions
+        assert data["status"] == "SIMULATED"
+        assert data["executed"] is False
+        assert "[SIMULATED ACTION]" in data["action"]
+        assert "No production infrastructure was modified" in data["message"]
+        assert "[SIMULATED]" in data["target_cluster"]

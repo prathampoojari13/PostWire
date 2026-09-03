@@ -1,8 +1,9 @@
 """FastAPI REST server for PostWire Incident Commander."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal, Optional
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from postwire.agent.commander import PostWireCommander
 from postwire.config import settings
@@ -11,6 +12,7 @@ from postwire.telemetry.models import (
     AggregateTelemetry,
     IncidentReport,
     MovieReleaseContext,
+    Region,
     TelemetryPoint,
 )
 from postwire.telemetry.scenarios import (
@@ -26,6 +28,21 @@ app = FastAPI(
     version="0.2.0",
 )
 
+# Enable CORS for local development and UI integration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "*",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 commander = PostWireCommander()
 analytics = ViewerQoEAnalytics()
 
@@ -38,12 +55,40 @@ class ScenarioSummary(BaseModel):
     expected_classification: str
 
 
+class RegionalQoEBreakdown(BaseModel):
+    region: str
+    concurrent_viewers: int
+    viewer_impact_score: float
+    playback_failure_rate: float
+    rebuffer_ratio: float
+    drm_license_latency_ms: float
+    manifest_latency_ms: float
+    status: Literal["HEALTHY", "WARNING", "CRITICAL"]
+
+
 class InvestigationResponse(BaseModel):
     scenario_id: str
     alert_event: str
     release_context: MovieReleaseContext
     aggregate_qoe: AggregateTelemetry
     report: IncidentReport
+    regional_breakdown: List[RegionalQoEBreakdown] = Field(default_factory=list)
+
+
+class SimulationActionRequest(BaseModel):
+    scenario_id: Optional[str] = "regional_streaming_incident"
+    action_type: Optional[str] = "drm_failover"
+
+
+class SimulationActionResponse(BaseModel):
+    status: str = "SIMULATED"
+    action: str
+    executed: bool = False
+    message: str = "No production infrastructure was modified."
+    target_cluster: str
+    projected_playback_failure_reduction: str
+    projected_ttfb: str
+    safety_check: str = "Passed. Zero blast radius on adjacent tenant clusters."
 
 
 class MCPQueryRequest(BaseModel):
@@ -109,6 +154,35 @@ async def list_scenarios() -> List[ScenarioSummary]:
     ]
 
 
+def compute_regional_breakdown(points: List[TelemetryPoint]) -> List[RegionalQoEBreakdown]:
+    """Aggregates telemetry points by geographic region into UI-ready metrics."""
+    breakdown: List[RegionalQoEBreakdown] = []
+    for r in Region:
+        reg_points = [p for p in points if p.region == r]
+        if not reg_points:
+            continue
+        agg = analytics.aggregate(reg_points, region=r)
+        if agg.viewer_impact_score >= 20.0 or agg.avg_playback_failure_rate >= 0.02 or agg.avg_drm_license_latency_ms >= 200.0:
+            st = "CRITICAL"
+        elif agg.viewer_impact_score >= 10.0 or agg.avg_playback_failure_rate >= 0.01:
+            st = "WARNING"
+        else:
+            st = "HEALTHY"
+        breakdown.append(
+            RegionalQoEBreakdown(
+                region=r.value,
+                concurrent_viewers=agg.total_concurrent_viewers,
+                viewer_impact_score=round(agg.viewer_impact_score, 1),
+                playback_failure_rate=round(agg.avg_playback_failure_rate, 4),
+                rebuffer_ratio=round(agg.avg_rebuffer_ratio, 4),
+                drm_license_latency_ms=round(agg.avg_drm_license_latency_ms, 1),
+                manifest_latency_ms=round(agg.avg_manifest_latency_ms, 1),
+                status=st,
+            )
+        )
+    return breakdown
+
+
 @app.post("/api/scenarios/{scenario_id}/investigate", response_model=InvestigationResponse)
 async def investigate_scenario(scenario_id: str) -> InvestigationResponse:
     """
@@ -132,6 +206,7 @@ async def investigate_scenario(scenario_id: str) -> InvestigationResponse:
     )
 
     agg = analytics.aggregate(points)
+    regional = compute_regional_breakdown(points)
 
     return InvestigationResponse(
         scenario_id=scenario_id,
@@ -139,6 +214,50 @@ async def investigate_scenario(scenario_id: str) -> InvestigationResponse:
         release_context=context,
         aggregate_qoe=agg,
         report=report,
+        regional_breakdown=regional,
+    )
+
+
+@app.get("/api/scenarios/{scenario_id}/regional-breakdown", response_model=List[RegionalQoEBreakdown])
+async def get_regional_breakdown(scenario_id: str) -> List[RegionalQoEBreakdown]:
+    """Retrieve regional QoE metrics matrix for a scenario."""
+    if scenario_id == "normal_movie_premiere":
+        _, _, points = generate_premiere_surge_telemetry()
+    elif scenario_id == "regional_streaming_incident":
+        _, _, points = generate_regional_incident_telemetry()
+    else:
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found.")
+    return compute_regional_breakdown(points)
+
+
+@app.post("/api/actions/simulate", response_model=SimulationActionResponse)
+async def simulate_action(req: Optional[SimulationActionRequest] = None) -> SimulationActionResponse:
+    """
+    Simulate an operational mitigation without modifying production infrastructure.
+    Explicitly labeled as [SIMULATED ACTION].
+    """
+    scen = req.scenario_id if req else "regional_streaming_incident"
+    if scen == "normal_movie_premiere":
+        return SimulationActionResponse(
+            status="SIMULATED",
+            action="[SIMULATED ACTION] Maintain edge capacity configuration for scheduled global premiere surge.",
+            executed=False,
+            message="No production infrastructure was modified. Simulation only.",
+            target_cluster="[SIMULATED] edge-delivery-mesh",
+            projected_playback_failure_reduction="Nominal (0.12% steady state)",
+            projected_ttfb="45ms (normal)",
+            safety_check="[SIMULATED] Passed. Zero blast radius on adjacent tenant clusters.",
+        )
+
+    return SimulationActionResponse(
+        status="SIMULATED",
+        action="[SIMULATED ACTION] Recommend rerouting APAC-South SmartTV DRM traffic to secondary regional DRM key service cluster.",
+        executed=False,
+        message="No production infrastructure was modified. Simulation only.",
+        target_cluster="[SIMULATED] secondary-regional-hsm-cluster",
+        projected_playback_failure_reduction="14.8% -> 0.42% in 90 seconds",
+        projected_ttfb="61ms projected (vs current 1,850ms)",
+        safety_check="[SIMULATED] Passed. Zero blast radius on adjacent tenant clusters.",
     )
 
 
