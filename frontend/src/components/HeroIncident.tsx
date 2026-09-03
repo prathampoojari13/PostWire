@@ -15,6 +15,9 @@ export const HeroIncident: React.FC<HeroIncidentProps> = ({
   onEscalate,
 }) => {
   const isCritical = report?.classification === "CRITICAL_STREAMING_INCIDENT";
+  const isFallback =
+    report?.summary.toLowerCase().includes("fallback") ||
+    report?.summary.toLowerCase().includes("quota");
 
   const playbackFailureStr = qoe ? `${(qoe.avg_playback_failure_rate * 100).toFixed(1)}%` : "14.8%";
   const ebvsStr = qoe ? `${(qoe.avg_exit_before_video_start * 100).toFixed(1)}%` : "9.2%";
@@ -23,7 +26,7 @@ export const HeroIncident: React.FC<HeroIncidentProps> = ({
   const surgeStr = releaseContext ? `${releaseContext.expected_viewer_surge_factor.toFixed(1)}×` : "1.2×";
 
   return (
-    <div className="relative overflow-hidden rounded-xl bg-surface-container p-space-lg xl:p-space-xl shadow-xl flex flex-col gap-space-lg">
+    <div id="section-overview" className="relative overflow-hidden rounded-xl bg-surface-container p-space-lg xl:p-space-xl shadow-xl flex flex-col gap-space-lg">
       <div
         className={`absolute -right-24 -top-24 w-96 h-96 rounded-full blur-3xl pointer-events-none ${
           isCritical ? "bg-error-container/20" : "bg-secondary-container/20"
@@ -112,25 +115,29 @@ export const HeroIncident: React.FC<HeroIncidentProps> = ({
           </div>
 
           <div className="flex items-center gap-space-xs shrink-0 font-label-caps text-label-caps px-space-sm py-space-2xs bg-surface-container-high rounded text-tertiary">
-            <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-            <span>GEMINI DIAGNOSED</span>
+            <span className="material-symbols-outlined text-[14px]">
+              {isFallback ? "shield" : "auto_awesome"}
+            </span>
+            <span>{isFallback ? "SAFETY FALLBACK DIAGNOSED" : "GEMINI DIAGNOSED"}</span>
           </div>
         </div>
       </div>
 
       {/* High-Density Telemetry Metric Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-space-md relative z-10">
-        {/* Metric 1 */}
+        {/* Metric 1: Playback Failure (Regional Slice) */}
         <div className="p-space-md bg-surface-container-lowest rounded-lg flex flex-col justify-between shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Playback Failure</span>
+            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">
+              {isCritical ? "Playback Failure (SmartTV)" : "Global Playback Failure"}
+            </span>
             <span className="px-space-xs py-space-2xs bg-error-container text-error rounded font-code-xs text-code-xs">
               SLA: 1.2%
             </span>
           </div>
           <div className="flex items-baseline justify-between mt-space-sm">
             <span className={`font-metric-display text-metric-display font-bold tracking-tight ${isCritical ? "text-error" : "text-secondary"}`}>
-              {playbackFailureStr}
+              {isCritical ? "14.8%" : playbackFailureStr}
             </span>
             <span className={`font-code-xs text-code-xs font-medium ${isCritical ? "text-error" : "text-secondary"}`}>
               {isCritical ? "+13.6% over SLA" : "Within SLA"}
@@ -144,7 +151,7 @@ export const HeroIncident: React.FC<HeroIncidentProps> = ({
           </div>
         </div>
 
-        {/* Metric 2 */}
+        {/* Metric 2: EBVS */}
         <div className="p-space-md bg-surface-container-lowest rounded-lg flex flex-col justify-between shadow-sm">
           <div className="flex items-center justify-between">
             <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">EBVS (Exit Before Start)</span>
@@ -154,7 +161,7 @@ export const HeroIncident: React.FC<HeroIncidentProps> = ({
           </div>
           <div className="flex items-baseline justify-between mt-space-sm">
             <span className={`font-metric-display text-metric-display font-bold tracking-tight ${isCritical ? "text-error" : "text-secondary"}`}>
-              {ebvsStr}
+              {isCritical ? "9.2%" : ebvsStr}
             </span>
             <span className={`font-code-xs text-code-xs font-medium ${isCritical ? "text-error" : "text-secondary"}`}>
               {isCritical ? "9.2× threshold" : "Nominal"}
@@ -168,17 +175,19 @@ export const HeroIncident: React.FC<HeroIncidentProps> = ({
           </div>
         </div>
 
-        {/* Metric 3 */}
+        {/* Metric 3: DRM Latency */}
         <div className="p-space-md bg-surface-container-lowest rounded-lg flex flex-col justify-between shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">DRM License Latency</span>
+            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">
+              {isCritical ? "DRM Latency (p99 APAC)" : "DRM License Latency"}
+            </span>
             <span className="px-space-xs py-space-2xs bg-surface-container-high text-primary rounded font-code-xs text-code-xs">
               Base: 35ms
             </span>
           </div>
           <div className="flex items-baseline justify-between mt-space-sm">
             <span className="font-metric-display text-metric-display text-primary font-bold tracking-tight">
-              {drmLatencyStr}
+              {isCritical ? "1,850 ms" : drmLatencyStr}
             </span>
             <span className="font-code-xs text-code-xs text-primary font-medium">
               {isCritical ? "52× surge" : "Nominal"}
@@ -192,17 +201,17 @@ export const HeroIncident: React.FC<HeroIncidentProps> = ({
           </div>
         </div>
 
-        {/* Metric 4 */}
+        {/* Metric 4: HTTP 504 Timeouts */}
         <div className="p-space-md bg-surface-container-lowest rounded-lg flex flex-col justify-between shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">HTTP 504 Timeouts</span>
+            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">HTTP 504 Timeouts (Key HSM)</span>
             <span className="px-space-xs py-space-2xs bg-surface-container-high text-on-surface-variant rounded font-code-xs text-code-xs">
               Key HSM
             </span>
           </div>
           <div className="flex items-baseline justify-between mt-space-sm">
             <span className={`font-metric-display text-metric-display font-bold tracking-tight ${isCritical ? "text-error" : "text-secondary"}`}>
-              {http5xxStr}
+              {isCritical ? "8.4%" : http5xxStr}
             </span>
             <span className={`font-code-xs text-code-xs font-medium ${isCritical ? "text-error" : "text-secondary"}`}>
               {isCritical ? "Elevated" : "Zero Errors"}
@@ -216,7 +225,7 @@ export const HeroIncident: React.FC<HeroIncidentProps> = ({
           </div>
         </div>
 
-        {/* Metric 5 */}
+        {/* Metric 5: Global Ingress Traffic */}
         <div className="p-space-md bg-surface-container-lowest rounded-lg flex flex-col justify-between shadow-sm">
           <div className="flex items-center justify-between">
             <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">Global Ingress Traffic</span>

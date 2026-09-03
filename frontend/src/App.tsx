@@ -19,6 +19,9 @@ import { GrafanaObservability } from "./components/GrafanaObservability";
 import { RegionalQoE } from "./components/RegionalQoE";
 import { IncidentHistory } from "./components/IncidentHistory";
 
+import { TerminalDrawer } from "./components/TerminalDrawer";
+import { SettingsModal } from "./components/SettingsModal";
+
 export const App: React.FC = () => {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [currentScenario, setCurrentScenario] = useState<string>("regional_streaming_incident");
@@ -26,6 +29,10 @@ export const App: React.FC = () => {
   const [regionalBreakdown, setRegionalBreakdown] = useState<RegionalQoEBreakdown[]>([]);
   const [isInvestigating, setIsInvestigating] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>("overview");
+
+  // Interactive Overlays
+  const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Simulation & Toast State
   const [simulationModalOpen, setSimulationModalOpen] = useState<boolean>(false);
@@ -66,6 +73,32 @@ export const App: React.FC = () => {
       console.error("Investigation error:", e);
     } finally {
       setIsInvestigating(false);
+    }
+  };
+
+  const handleNavigate = (tabId: string) => {
+    setActiveTab(tabId);
+    if (tabId === "overview") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    const targetMap: Record<string, string> = {
+      incidents: "section-incidents",
+      releases: "section-releases",
+      "viewer-qoe": "section-viewer-qoe",
+      grafana: "section-grafana",
+      "investigation-history": "section-investigation-history",
+    };
+    const elemId = targetMap[tabId] || `section-${tabId}`;
+    const elem = document.getElementById(elemId);
+    if (elem) {
+      const navOffset = 80;
+      const elementPosition = elem.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - navOffset;
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth",
+      });
     }
   };
 
@@ -124,7 +157,7 @@ export const App: React.FC = () => {
         releaseContext={releaseContext}
         report={report}
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        onNavigate={handleNavigate}
         currentScenario={currentScenario}
         onSwitchScenario={runInvestigation}
         isInvestigating={isInvestigating}
@@ -132,7 +165,12 @@ export const App: React.FC = () => {
       />
 
       {/* Fixed Left Sidebar */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar
+        activeTab={activeTab}
+        onNavigate={handleNavigate}
+        onOpenTerminal={() => setIsTerminalOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
 
       {/* Main Content Area matching Stitch DOM */}
       <div className="pl-14">
@@ -144,6 +182,21 @@ export const App: React.FC = () => {
               onClose={() => setSimulationModalOpen(false)}
               onConfirm={handleConfirmSimulation}
               simulation={simulationData}
+            />
+
+            {/* SRE War Room Terminal Overlay */}
+            <TerminalDrawer
+              isOpen={isTerminalOpen}
+              onClose={() => setIsTerminalOpen(false)}
+              health={health}
+              report={report}
+            />
+
+            {/* Autonomous Agent Settings Modal */}
+            <SettingsModal
+              isOpen={isSettingsOpen}
+              onClose={() => setIsSettingsOpen(false)}
+              health={health}
             />
 
             {/* Notification Toast */}
@@ -160,7 +213,7 @@ export const App: React.FC = () => {
               />
 
               {/* 2. CORE COMMAND ROW: INVESTIGATION VS DECISION/MITIGATION */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+              <div id="section-incidents" className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
                 <CommanderStream report={report} health={health} />
                 <IncidentDecision
                   report={report}
@@ -170,33 +223,41 @@ export const App: React.FC = () => {
               </div>
 
               {/* 3. PREMIERE ANOMALY COMPARISON */}
-              <AnomalyComparison
-                report={report}
-                releaseContext={releaseContext}
-                qoe={qoe}
-              />
+              <div id="section-releases">
+                <AnomalyComparison
+                  report={report}
+                  releaseContext={releaseContext}
+                  qoe={qoe}
+                />
+              </div>
 
               {/* 4. REAL-TIME GRAFANA OBSERVABILITY SECTION */}
-              <GrafanaObservability
-                qoe={qoe}
-                health={health}
-                onRefresh={() => runInvestigation(currentScenario)}
-              />
+              <div id="section-grafana">
+                <GrafanaObservability
+                  qoe={qoe}
+                  health={health}
+                  onRefresh={() => runInvestigation(currentScenario)}
+                />
+              </div>
 
               {/* 5. VIEWER QUALITY OF EXPERIENCE (QoE) & REGIONAL IMPACT TABLE */}
-              <RegionalQoE
-                qoe={qoe}
-                regionalBreakdown={regionalBreakdown}
-                report={report}
-              />
+              <div id="section-viewer-qoe">
+                <RegionalQoE
+                  qoe={qoe}
+                  regionalBreakdown={regionalBreakdown}
+                  report={report}
+                />
+              </div>
 
               {/* 6. INCIDENT INVESTIGATION HISTORY TABLE */}
-              <IncidentHistory
-                report={report}
-                releaseContext={releaseContext}
-                onSimulateReroute={handleOpenSimulation}
-                onExportAuditTrail={handleExportAuditTrail}
-              />
+              <div id="section-investigation-history">
+                <IncidentHistory
+                  report={report}
+                  releaseContext={releaseContext}
+                  onSimulateReroute={handleOpenSimulation}
+                  onExportAuditTrail={handleExportAuditTrail}
+                />
+              </div>
             </div>
           </div>
         </main>

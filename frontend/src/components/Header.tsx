@@ -6,7 +6,7 @@ interface HeaderProps {
   releaseContext: MovieReleaseContext | null;
   report: IncidentReport | null;
   activeTab: string;
-  setActiveTab: (tab: string) => void;
+  onNavigate: (tab: string) => void;
   currentScenario: string;
   onSwitchScenario: (scenarioId: string) => void;
   isInvestigating: boolean;
@@ -18,7 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   releaseContext,
   report,
   activeTab,
-  setActiveTab,
+  onNavigate,
   currentScenario,
   onSwitchScenario,
   isInvestigating,
@@ -92,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => onNavigate(tab.id)}
                   className={`px-space-md py-space-xs font-body-sm transition-colors flex items-center gap-space-xs ${
                     active
                       ? "bg-surface-container-high text-primary-fixed border border-outline-variant/40 rounded"
