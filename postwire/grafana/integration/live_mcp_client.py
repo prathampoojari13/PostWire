@@ -1,10 +1,8 @@
 """
 Official Grafana MCP Client Adapter.
 
-Communicates with the official Grafana MCP server (e.g., mcp-grafana)
+Communicates with the official Grafana MCP server (mcp-grafana)
 via standard Model Context Protocol (MCP) using standard I/O (stdio) JSON-RPC.
-
-This is the REAL runtime integration required for the hackathon submission.
 """
 
 import asyncio
@@ -31,11 +29,15 @@ class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
         grafana_url: Optional[str] = None,
         token: Optional[str] = None,
         command: Optional[str] = None,
+        prometheus_uid: Optional[str] = None,
+        loki_uid: Optional[str] = None,
     ):
         raw_url = grafana_url if grafana_url is not None else settings.grafana_url
         self.grafana_url = raw_url.rstrip("/") if raw_url else ""
         self.token = token if token is not None else settings.grafana_service_account_token
         self.command = command or settings.grafana_mcp_command
+        self.prometheus_uid = prometheus_uid or settings.grafana_prometheus_uid
+        self.loki_uid = loki_uid or settings.grafana_loki_uid
         self._validate_configuration()
 
     @property
@@ -56,7 +58,6 @@ class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
         """Constructs StdioServerParameters with required Grafana environment variables."""
         from mcp import StdioServerParameters
 
-        # Parse command string into binary and arguments
         parts = shlex.split(self.command)
         if not parts:
             raise ValueError("GRAFANA_MCP_COMMAND cannot be empty.")
@@ -74,10 +75,10 @@ class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
             env=env
         )
 
-    async def _execute_mcp_call(self, tool_name: str, arguments: Dict[str, Any], timeout_seconds: float = 15.0) -> Any:
+    async def _execute_mcp_session(self, callback, timeout_seconds: float = 25.0) -> Any:
         """
-        Spawns mcp-grafana via stdio, initializes the session, and executes a tool call.
-        Handles missing executable, timeouts, auth errors, and malformed responses cleanly.
+        Connects via stdio, initializes session, runs callback(session), and returns result.
+        Safely handles timeouts, missing executables, and session errors.
         """
         from mcp import ClientSession
         from mcp.client.stdio import stdio_client
@@ -97,16 +98,15 @@ class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
                     async with stdio_client(params) as (read_stream, write_stream):
                         async with ClientSession(read_stream, write_stream) as session:
                             await session.initialize()
-                            result = await session.call_tool(tool_name, arguments)
-                            return self._parse_tool_result(result)
+                            return await callback(session)
                 except FileNotFoundError as fnf:
                     logger.error("mcp-grafana executable not found: %s", self.command)
                     return {
                         "status": "error",
                         "error": "mcp_executable_missing",
                         "message": (
-                            f"mcp-grafana executable '{self.command}' not found on system PATH. "
-                            f"Please install mcp-grafana or configure GRAFANA_MCP_COMMAND. Details: {fnf}"
+                            f"mcp-grafana command '{self.command}' could not be executed. "
+                            f"Ensure mcp-grafana is installed or uv tool is available. Details: {fnf}"
                         ),
                     }
                 except ConnectionError as conn_err:
@@ -117,18 +117,18 @@ class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
                         "message": f"Connection to mcp-grafana failed: {conn_err}",
                     }
                 except Exception as session_exc:
-                    logger.error("MCP session error calling tool %s: %s", tool_name, session_exc)
+                    logger.error("MCP session error: %s", session_exc)
                     return {
                         "status": "error",
                         "error": "mcp_session_error",
                         "message": str(session_exc),
                     }
         except TimeoutError:
-            logger.error("Timeout (%ss) while executing MCP tool %s", timeout_seconds, tool_name)
+            logger.error("Timeout (%ss) while communicating with mcp-grafana", timeout_seconds)
             return {
                 "status": "error",
                 "error": "mcp_tool_timeout",
-                "message": f"Execution of Grafana MCP tool '{tool_name}' timed out after {timeout_seconds}s",
+                "message": f"mcp-grafana session timed out after {timeout_seconds}s",
             }
 
     def _parse_tool_result(self, result: Any) -> Any:
@@ -136,7 +136,6 @@ class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
         if not result:
             return {}
 
-        # If result has content blocks (standard MCP CallToolResult)
         if hasattr(result, "content"):
             content_blocks = result.content
             parsed_items = []
@@ -158,84 +157,112 @@ class LiveGrafanaMCPClient(GrafanaMCPClientInterface):
             return result
         return {"data": str(result)}
 
-    async def discover_tools(self, timeout_seconds: float = 10.0) -> List[Dict[str, Any]]:
-        """
-        Queries mcp-grafana tools/list to inspect all tools exposed by the official server.
-        """
-        from mcp import ClientSession
-        from mcp.client.stdio import stdio_client
-
+    async def _resolve_datasource_uid(self, session, ds_type: str) -> Optional[str]:
+        """Resolves datasource UID for prometheus or loki using list_datasources tool."""
         try:
-            params = self._get_server_params()
-            async with asyncio.timeout(timeout_seconds):
-                async with stdio_client(params) as (read_stream, write_stream):
-                    async with ClientSession(read_stream, write_stream) as session:
-                        await session.initialize()
-                        tools_result = await session.list_tools()
-                        return [
-                            {
-                                "name": tool.name,
-                                "description": tool.description,
-                                "inputSchema": tool.inputSchema,
-                            }
-                            for tool in tools_result.tools
-                        ]
-        except Exception as exc:
-            logger.warning("Could not discover tools from mcp-grafana: %s", exc)
+            res = await session.call_tool("list_datasources", {"type": ds_type, "limit": 10})
+            parsed = self._parse_tool_result(res)
+            # parsed can be list of datasources or dict with datasources
+            datasources = parsed if isinstance(parsed, list) else parsed.get("datasources", [parsed])
+            for ds in datasources:
+                if isinstance(ds, dict) and ds.get("uid"):
+                    return ds["uid"]
+        except Exception as e:
+            logger.debug("Auto-resolving datasource UID for %s returned: %s", ds_type, e)
+        return None
+
+    async def discover_tools(self, timeout_seconds: float = 15.0) -> List[Dict[str, Any]]:
+        """Queries tools/list from mcp-grafana to inspect all available tools."""
+        async def run_list(session):
+            tools_result = await session.list_tools()
             return [
                 {
-                    "error": "tool_discovery_failed",
-                    "message": str(exc),
+                    "name": tool.name,
+                    "description": tool.description,
+                    "inputSchema": getattr(tool, "input_schema", getattr(tool, "inputSchema", {})),
                 }
+                for tool in tools_result.tools
             ]
 
+        res = await self._execute_mcp_session(run_list, timeout_seconds=timeout_seconds)
+        if isinstance(res, dict) and res.get("status") == "error":
+            return [res]
+        return res if isinstance(res, list) else [res]
+
     async def query_prometheus(self, query: str, time_range: str = "5m") -> Dict[str, Any]:
-        """Call official Grafana MCP tool for Prometheus queries."""
-        raw = await self._execute_mcp_call(
-            tool_name="query_prometheus",
-            arguments={"query": query, "time_range": time_range}
-        )
+        """
+        Executes PromQL query using official mcp-grafana tool 'query_prometheus'.
+        Auto-resolves datasource UID if not explicitly configured.
+        """
+        async def run_prom(session):
+            # Resolve datasource UID
+            ds_uid = self.prometheus_uid
+            if not ds_uid:
+                ds_uid = await self._resolve_datasource_uid(session, "prometheus") or "grafanacloud-prom"
+                self.prometheus_uid = ds_uid
 
+            # Call query_prometheus matching mcp-grafana signature
+            tool_args = {
+                "datasourceUid": ds_uid,
+                "expr": query,
+                "endTime": "now",
+                "queryType": "instant"
+            }
+            res = await session.call_tool("query_prometheus", tool_args)
+            return self._parse_tool_result(res)
+
+        raw = await self._execute_mcp_session(run_prom)
         if isinstance(raw, dict) and raw.get("status") == "error":
-            return raw
-
-        if isinstance(raw, dict) and "data" in raw:
-            raw["status"] = "success"
-            raw["mcp_source"] = "official_mcp_grafana"
             return raw
 
         return {
             "status": "success",
-            "data": {
-                "resultType": "vector",
-                "result": raw if isinstance(raw, list) else [raw]
-            },
+            "data": raw if isinstance(raw, dict) else {"result": raw},
             "mcp_source": "official_mcp_grafana"
         }
 
     async def query_loki(self, logql: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """Call official Grafana MCP tool for Loki queries."""
-        raw = await self._execute_mcp_call(
-            tool_name="query_loki",
-            arguments={"query": logql, "limit": limit}
-        )
+        """
+        Executes LogQL query using official mcp-grafana tool 'query_loki_logs'.
+        Auto-resolves datasource UID if not explicitly configured.
+        """
+        async def run_loki(session):
+            # Resolve datasource UID
+            ds_uid = self.loki_uid
+            if not ds_uid:
+                ds_uid = await self._resolve_datasource_uid(session, "loki") or "grafanacloud-logs"
+                self.loki_uid = ds_uid
 
+            tool_args = {
+                "datasourceUid": ds_uid,
+                "logql": logql,
+                "limit": limit
+            }
+            # Official mcp-grafana uses 'query_loki_logs'
+            res = await session.call_tool("query_loki_logs", tool_args)
+            return self._parse_tool_result(res)
+
+        raw = await self._execute_mcp_session(run_loki)
         if isinstance(raw, dict) and raw.get("status") == "error":
             return [raw]
 
         if isinstance(raw, list):
             return raw
-        if isinstance(raw, dict) and "logs" in raw:
-            return raw["logs"]
         return [raw]
 
     async def list_active_alerts(self, filter_labels: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
-        """Call official Grafana MCP tool for alerts."""
-        raw = await self._execute_mcp_call(
-            tool_name="list_alerts",
-            arguments={"filter": filter_labels or {}}
-        )
+        """
+        Retrieves active alerts using official mcp-grafana tool 'list_alert_groups'.
+        """
+        async def run_alerts(session):
+            tool_args = {}
+            if filter_labels:
+                tool_args["labels"] = [f"{k}:{v}" for k, v in filter_labels.items()]
 
+            res = await session.call_tool("list_alert_groups", tool_args)
+            return self._parse_tool_result(res)
+
+        raw = await self._execute_mcp_session(run_alerts)
         if isinstance(raw, dict) and raw.get("status") == "error":
             return [raw]
 

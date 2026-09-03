@@ -94,7 +94,7 @@ async def test_live_mcp_executable_missing_handled_safely():
     res = await client.query_prometheus("up")
     assert res["status"] == "error"
     assert res["error"] == "mcp_executable_missing"
-    assert "not found" in res["message"].lower()
+    assert "not found" in res["message"].lower() or "cannot find" in res["message"].lower()
 
     logs = await client.query_loki('{app="test"}')
     assert len(logs) == 1
