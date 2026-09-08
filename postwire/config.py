@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Google Cloud / Gemini AI
     gemini_api_key: str | None = Field(default=None, description="Google Gemini API key")
     google_api_key: str | None = Field(default=None, description="Google API key alternative")
-    gemini_model: str = Field(default="gemini-2.5-flash", description="Configurable Gemini model version")
+    gemini_model: str = Field(default="gemini-3.6-flash", description="Configurable Gemini model version")
     google_cloud_project: str | None = Field(default=None, description="Google Cloud Project ID for Vertex AI ADC")
     google_cloud_location: str = Field(default="us-central1", description="Google Cloud region for Vertex AI")
     google_genai_use_vertexai: bool = Field(default=False, description="Set to true to use Google Cloud Vertex AI ADC")

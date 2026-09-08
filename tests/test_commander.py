@@ -84,8 +84,8 @@ async def test_commander_regional_incident():
 
 def test_adk_agent_initialization():
     """Verify Google ADK Agent can be constructed with configured Gemini model."""
-    runtime = GoogleADKCommanderRuntime(model_name="gemini-2.5-flash")
-    assert runtime.model_name == "gemini-2.5-flash"
+    runtime = GoogleADKCommanderRuntime(model_name="gemini-3.6-flash")
+    assert runtime.model_name == "gemini-3.6-flash"
     assert "Google ADK Agent" in runtime.runtime_name
 
     mcp_mock = MockGrafanaMCPClient()
@@ -101,7 +101,7 @@ def test_adk_agent_initialization():
     agent = runtime.build_adk_agent(toolset)
 
     assert agent.name == "postwire_incident_commander"
-    assert agent.model == "gemini-2.5-flash"
+    assert agent.model == "gemini-3.6-flash"
     assert agent.output_schema is IncidentReport
 
 
