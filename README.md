@@ -1,621 +1,218 @@
-# PostWire — Autonomous Streaming Release Incident Commander
+# 🛡️ PostWire — Autonomous Streaming Release Incident Commander
 
-> **Google Cloud Agentic Cinema Hackathon**  
-> **Target Partner Track:** Grafana  
-> **Core AI:** Google ADK + Google Gemini  
-> **Architecture:** Autonomous Incident Commander Agent + specialized investigation tools  
+> **AI-powered incident intelligence for streaming platforms — combining movie release context, viewer QoE, and real-time Grafana telemetry to detect, investigate, and respond to release incidents.**
 
-PostWire is an autonomous streaming incident commander designed for blockbuster movie releases.
+**Version:** `0.2.0`
+**Status:** 🟢 Live
 
-It combines **movie-release context, viewer Quality of Experience (QoE), and Grafana infrastructure telemetry** to determine whether an unusual traffic pattern is an expected premiere surge or a real viewer-impacting incident.
+### 🚀 Live Demo
 
-> **“PostWire doesn't ask whether traffic is unusual; it asks whether the unusual traffic matters to viewers.”**
+**Frontend:**
+https://postwire-frontend.onrender.com/
 
----
+**Backend API:**
+https://postwire-kzex.onrender.com/
 
-## 🎯 The Problem
+**API Documentation (Swagger):**
+https://postwire-kzex.onrender.com/docs
 
-During a major movie premiere, streaming traffic can increase by **8×–10× within minutes**.
-
-A traditional monitoring system may immediately raise an incident because traffic crossed a threshold—even when the CDN, origin, and viewer experience are healthy.
-
-The opposite problem is more dangerous:
-
-A severe infrastructure failure can affect a specific **region + device combination** while global metrics remain mostly healthy.
-
-For example:
-
-* Global traffic: only **1.2×**
-* APAC-South SmartTV DRM latency: **~1,850 ms**
-* Playback failures: **14.8%**
-* HTTP 504 timeouts: **8.4%**
-* Viewer impact: severe
-
-A simple global threshold may miss this completely.
-
-PostWire is designed to connect those signals.
+**OpenAPI Specification:**
+https://postwire-kzex.onrender.com/openapi.json
 
 ---
 
-# 🧠 What PostWire Does
+## 🎯 What is PostWire?
 
-When an alert or anomaly appears, PostWire's Commander Agent investigates dynamically.
+PostWire is an **autonomous AI incident commander** designed for streaming platforms during high-impact movie and content releases.
 
-```text
-                    ALERT / ANOMALY
-                           │
-                           ▼
-              ┌────────────────────────┐
-              │  PostWire Commander     │
-              │  Google ADK + Gemini    │
-              └────────────┬───────────┘
-                           │
-                    Dynamic Tool Choice
-                           │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
-   Release Context     Viewer QoE      Grafana MCP
-   ───────────────     ───────────     ───────────
-   Premiere window     Failure rate    Prometheus
-   Expected surge      Rebuffering     Loki
-   Target devices      VIS             Alerting
-          │                │                │
-          └────────────────┼────────────────┘
-                           ▼
-                Evidence Correlation
-                           │
-                           ▼
-                 Incident Classification
-                           │
-              ┌────────────┴────────────┐
-              ▼                         ▼
-      Expected Premiere          Critical Incident
-           Surge                       │
-                                       ▼
-                              Root Cause + Evidence
-                                       │
-                                       ▼
-                             [SIMULATED] Mitigation
-```
+When a major release happens, streaming platforms can experience sudden changes in:
 
-The Commander does **not** blindly analyze every signal.
-
-It chooses investigation tools based on the evidence available and records the investigation as a structured trace.
-
----
-
-# 🤖 Agentic Architecture
-
-PostWire uses **one autonomous Incident Commander Agent** built with the official Google ADK framework.
-
-Instead of chaining multiple independent LLM agents, the Commander dynamically selects specialized tools.
-
-### Commander Tools
-
-| Tool                       | Purpose                                                           |
-| -------------------------- | ----------------------------------------------------------------- |
-| `get_release_context`      | Premiere schedule, expected traffic multiplier and target devices |
-| `inspect_viewer_qoe`       | Viewer QoE and impact analysis                                    |
-| `query_grafana_prometheus` | PromQL infrastructure investigation                               |
-| `query_grafana_loki`       | LogQL error investigation                                         |
-| `list_grafana_alerts`      | Grafana alert inspection                                          |
-
-The agent can investigate, correlate evidence, classify the incident, and produce a structured decision.
-
-Private chain-of-thought is **not exposed**. The application displays only the investigation trace, selected tools, evidence, decision, confidence, and recommendation.
-
----
-
-# 🔎 Dynamic Investigation Flow
-
-### 1. Alert
-
-PostWire receives an anomaly such as:
-
-```text
-Elevated traffic
-Playback failures
-Regional QoE degradation
-Infrastructure errors
-```
-
-### 2. Form an investigation hypothesis
-
-The Commander determines what evidence is needed next.
-
-For a traffic surge:
-
-```text
-Traffic anomaly
-      ↓
-Release context
-      ↓
-Expected premiere surge?
-      ↓
-Viewer QoE
-      ↓
-Expected or incident?
-```
-
-For a regional failure:
-
-```text
-Regional QoE degradation
-      ↓
-Region + device analysis
-      ↓
-Grafana Prometheus
-      ↓
-Grafana Loki
-      ↓
-Infrastructure correlation
-      ↓
-Root-cause hypothesis
-```
-
-### 3. Correlate Evidence
-
-PostWire correlates:
-
-* Release expectations
-* Traffic
-* Viewer failures
-* Device-specific QoE
-* Regional behavior
-* Infrastructure metrics
-* Error logs
-* Grafana alerts
-
-### 4. Structured Decision
-
-The Commander produces an `IncidentDecision` containing:
-
-* Classification
-* Confidence
-* Evidence
-* Root-cause hypothesis
-* Investigation trace
-* Recommended mitigation
-
-### 5. Safe Mitigation Recommendation
-
-Operational recommendations are explicitly marked:
-
-```text
-[SIMULATED]
-```
-
-PostWire **does not modify production traffic, DRM infrastructure, or routing**.
-
----
-
-# 🎬 Demo Scenarios
-
-PostWire includes two deterministic scenarios for demonstrating the difference between an expected premiere and a real incident.
-
-## Scenario 1 — Normal Premiere
-
-**CyberDune 2**
-
-```text
-Expected traffic:        ~8×
-CDN cache hit ratio:     ~97.5%
-Viewer QoE:              Healthy
-Playback failures:      ~0.6%
-```
-
-PostWire identifies the traffic spike as:
-
-```text
-EXPECTED_PREMIERE_SURGE
-```
-
-The key insight:
-
-> High traffic alone does not mean an incident.
-
----
-
-## Scenario 2 — Regional Streaming Incident
-
-**Neon Tokyo: Origins**
-
-```text
-Region:                  APAC-South
-Global traffic:         ~1.2×
-SmartTV DRM latency:    ~1,850 ms
-HTTP 504 timeouts:      ~8.4%
-Playback failures:     ~14.8%
-EBVS:                    ~9.2%
-```
-
-The global traffic level is nowhere near the expected premiere surge.
-
-However, PostWire identifies severe viewer impact localized to:
-
-```text
-APAC-South
-      +
-SmartTV
-      +
-DRM / Key infrastructure
-```
-
-Classification:
-
-```text
-CRITICAL_STREAMING_INCIDENT
-```
-
-Recommended action:
-
-```text
-[SIMULATED]
-Reroute APAC-South SmartTV DRM traffic
-to a secondary healthy key cluster.
-```
-
-The recommendation is advisory only and requires operator authorization.
-
----
-
-# 🔌 Official Grafana MCP Integration
-
-PostWire integrates with the **official Grafana MCP server (`mcp-grafana`)**.
-
-Communication uses standard:
-
-```text
-stdio
-  ↓
-JSON-RPC
-  ↓
-Model Context Protocol
-```
-
-Architecture:
-
-```text
-┌───────────────────────────────────────────┐
-│       PostWire Commander Agent            │
-│       Google ADK + Gemini                 │
-└─────────────────────┬─────────────────────┘
-                      │
-                      │ MCP / stdio JSON-RPC
-                      ▼
-┌───────────────────────────────────────────┐
-│       Official Grafana MCP Server         │
-│              mcp-grafana                  │
-└─────────────────────┬─────────────────────┘
-                      │
-                      ▼
-┌───────────────────────────────────────────┐
-│              Grafana Cloud                │
-│                                           │
-│  Prometheus  │  Loki  │  Alerting        │
-└───────────────────────────────────────────┘
-```
-
-## Verified Capabilities
-
-The live integration was verified for:
-
-* Official `mcp-grafana`
-* MCP handshake
-* Tool discovery
-* Datasource discovery
-* Prometheus connectivity
-* Loki connectivity
-* Grafana alerting
-* PostWire → MCP → Grafana Cloud communication
-
-The integration discovered **81 Grafana MCP tools** during verification.
-
-### Prometheus
-
-PostWire can execute PromQL through Grafana MCP for metrics such as:
-
-* Edge ingress request rate
-* CDN cache hit ratio
+* Viewer traffic
+* Buffering and playback quality
+* Regional availability
 * Error rates
-* Regional infrastructure behavior
-* DRM-related latency
+* Device-specific performance
+* Infrastructure health
 
-### Loki
+PostWire correlates **release context + viewer Quality of Experience (QoE) + infrastructure telemetry** to automatically investigate incidents and recommend corrective actions.
 
-PostWire can execute LogQL through Grafana MCP for:
-
-* Error signatures
-* Timeout patterns
-* Regional failures
-* Infrastructure logs
-
-### Alerting
-
-Grafana alert rules can also be inspected through the MCP integration.
+Instead of forcing an SRE to manually inspect multiple dashboards, PostWire acts as an intelligent incident commander.
 
 ---
 
-# 🌐 Reality Matrix
-
-PostWire intentionally separates **real infrastructure integrations** from **synthetic demonstration data**.
-
-| Component            | Status        | Details                              |
-| -------------------- | ------------- | ------------------------------------ |
-| Google Gemini        | **REAL**      | Gemini via official Google SDK / ADK |
-| Google ADK           | **REAL**      | Official `google-adk` Agent + Runner |
-| Grafana MCP          | **REAL**      | Official `mcp-grafana` integration   |
-| Grafana Cloud        | **REAL**      | Live Grafana Cloud integration       |
-| Prometheus           | **REAL**      | Live PromQL queries through MCP      |
-| Loki                 | **REAL**      | Live LogQL queries through MCP       |
-| Grafana Alerting     | **REAL**      | Live alert inspection                |
-| Streaming telemetry  | **SIMULATED** | Synthetic OTT time-series            |
-| Viewer datasets      | **SIMULATED** | Synthetic Region × Device QoE data   |
-| Mitigation execution | **SIMULATED** | No production changes are performed  |
-
-This distinction is intentional and keeps the demonstration technically honest.
-
----
-
-# 🛡️ Gemini Safety Fallback
-
-PostWire is designed to remain operational if Gemini is temporarily unavailable or quota-limited.
-
-Normal execution:
+## 🧠 Core Idea
 
 ```text
-Google ADK
-    ↓
-Gemini
-    ↓
-Commander investigation
+                ┌──────────────────────┐
+                │   Movie Release      │
+                │      Context         │
+                └──────────┬───────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────┐
+│                    POSTWIRE                     │
+│                                                 │
+│        Autonomous AI Incident Commander         │
+│                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────┐ │
+│  │ Release     │  │ Viewer QoE  │  │ Grafana │ │
+│  │ Context     │  │ Telemetry   │  │  MCP    │ │
+│  └──────┬──────┘  └──────┬──────┘  └────┬────┘ │
+│         │                │              │      │
+│         └────────────────┼──────────────┘      │
+│                          ▼                     │
+│                 ┌────────────────┐             │
+│                 │ Gemini + ADK   │             │
+│                 │ AI Commander   │             │
+│                 └───────┬────────┘             │
+│                         ▼                      │
+│              Incident Investigation            │
+│                         │                      │
+│                         ▼                      │
+│              Recommended Actions               │
+└─────────────────────────────────────────────────┘
 ```
-
-If Gemini returns a quota or availability failure:
-
-```text
-Google ADK
-    ↓
-Gemini unavailable
-    ↓
-Deterministic Safety Fallback
-    ↓
-Structured incident decision
-```
-
-The UI explicitly identifies when the safety fallback is active.
-
-This prevents the monitoring system from becoming unavailable simply because the AI reasoning service is temporarily unavailable.
 
 ---
 
-# ⚙️ Technology Stack
+## ✨ Key Features
 
-### AI
+### 🤖 Autonomous Incident Investigation
 
-* Google Gemini (`gemini-3.6-flash`)
-* Google ADK
-* `google-genai`
-* Autonomous tool selection
+PostWire uses Gemini-powered reasoning to investigate streaming incidents instead of relying only on static rules.
 
-### Observability
+The AI can:
 
-* Grafana Cloud
-* Grafana MCP
-* Prometheus
-* Loki
-* Grafana Alerting
-
-### Backend
-
-* Python
-* FastAPI
-* Pydantic
-* MCP client
-* Synthetic telemetry engine
-* QoE analytics
-
-### Frontend
-
-* React
-* TypeScript
-* Vite
-* Tailwind CSS
+1. Analyze the release scenario
+2. Query available telemetry
+3. Correlate QoE signals
+4. Identify abnormal patterns
+5. Classify the incident
+6. Determine likely root causes
+7. Recommend remediation actions
 
 ---
 
-# 🔐 Configuration
+### 📊 Viewer QoE Analysis
 
-Create a local `.env` file.
+PostWire analyzes viewer experience across multiple dimensions:
 
-**Never commit this file to GitHub.**
+* Buffering
+* Playback failures
+* Startup latency
+* Error rates
+* Regional performance
+* Device performance
+
+This helps distinguish between an infrastructure problem and a localized viewer-experience problem.
+
+---
+
+### 🌍 Regional Breakdown
+
+PostWire provides regional QoE analysis to identify geographic hotspots.
 
 Example:
 
-```env
-# AI
-POSTWIRE_AI_MODE=google_adk
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-3.6-flash
-
-# Grafana
-POSTWIRE_GRAFANA_MODE=live
-POSTWIRE_RUN_GRAFANA_INTEGRATION=true
-GRAFANA_URL=https://your-stack.grafana.net
-GRAFANA_SERVICE_ACCOUNT_TOKEN=your_grafana_token_here
-GRAFANA_MCP_COMMAND=python -m uv tool run mcp-grafana
-
-# Server
-PORT=8000
-HOST=0.0.0.0
+```text
+Region        QoE Status
+────────────────────────────
+North India   🟢 Healthy
+South India   🔴 Degraded
+West India    🟡 Warning
+East India    🟢 Healthy
 ```
 
-For tests and offline development, Grafana can be configured to use the mock/offline mode.
+This allows incident responders to determine whether an issue is:
+
+* Global
+* Regional
+* Device-specific
+* Infrastructure-specific
 
 ---
 
-# 🧪 Verification & Testing
+### 📡 Grafana MCP Integration
 
-The final repository contains an automated test suite covering the core system.
+PostWire connects to Grafana telemetry through MCP.
 
-Run:
+This allows the incident commander to access operational telemetry and use it as part of its investigation.
 
-```bash
-python -m pytest -q
-```
+The architecture enables AI reasoning over real operational signals rather than relying entirely on predefined datasets.
 
-Current final verification:
+---
+
+### 🧠 Gemini + Google ADK
+
+The AI incident commander is powered by:
+
+* Google Gemini
+* Google ADK
+* MCP-based tool execution
+
+The agent can dynamically determine which tools and telemetry sources are relevant to an investigation.
+
+---
+
+### 🧪 Action Simulation
+
+PostWire can simulate recommended remediation actions before they are applied.
+
+Example actions can include:
 
 ```text
-33 passed
-1 skipped
+Traffic rerouting
+Regional mitigation
+Capacity scaling
+Configuration changes
+Feature rollback
 ```
 
-The test suite validates:
-
-* Google ADK agent construction
-* Tool registration
-* Investigation behavior
-* Structured decision generation
-* Telemetry generation
-* QoE analytics
-* Deterministic scenarios
-* Grafana MCP adapters
-* MCP error handling
-* Result parsing
+This provides a safer way to evaluate possible responses.
 
 ---
 
-## Live Grafana Integration Test
+## 🔌 API Endpoints
 
-Run:
-
-```bash
-POSTWIRE_RUN_GRAFANA_INTEGRATION=true python -m pytest tests/test_grafana_mcp.py -k live -v
-```
-
-The live integration verifies the connection between:
-
-```text
-PostWire
-   ↓
-Grafana MCP
-   ↓
-Grafana Cloud
-```
-
----
-
-## Live Grafana Diagnostics
-
-Run:
-
-```bash
-python -m postwire.grafana.integration.verify_live
-```
-
-The diagnostics verify:
-
-```text
-Official mcp-grafana       PASS
-MCP handshake              PASS
-Tool discovery             PASS
-Datasource discovery      PASS
-Prometheus connection      PASS
-Loki connection            PASS
-Alerting connection        PASS
-PostWire → MCP → Cloud     PASS
-```
-
----
-
-# 🚀 Running PostWire Locally
-
-## 1. Start the backend
-
-```bash
-python -m uvicorn postwire.api.server:app --port 8000 --host 0.0.0.0 --reload
-```
-
-## 2. Start the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open:
-
-```text
-http://localhost:5173
-```
-
----
-
-# 🖥️ Dashboard
-
-The PostWire dashboard provides:
-
-* Incident overview
-* Autonomous investigation stream
-* Incident classification
-* Confidence score
-* Evidence trail
-* Scenario switching
-* Regional QoE matrix
-* Grafana observability panels
-* Investigation history
-* SRE war-room terminal
-* Agent and MCP configuration view
-* JSON audit-trail export
-* Safe mitigation simulation
-
-The interface is designed around an SRE/incident-response workflow rather than a generic chatbot interface.
-
----
-
-# 🔌 API Endpoints
-
-### Health
+### Health Check
 
 ```http
 GET /health
 ```
 
-Returns service health and active AI/Grafana runtime information.
+Checks whether the backend is operational.
 
-### Grafana MCP Tools
+### List MCP Tools
 
 ```http
 GET /api/mcp/tools
 ```
 
-Lists tools available through the active Grafana MCP integration.
+Returns available MCP tools.
 
-### Grafana Query
+### Query MCP
 
 ```http
 POST /api/mcp/query
 ```
 
-Queries Prometheus or Loki through Grafana MCP.
+Executes an MCP query.
 
-### Scenarios
+### List Scenarios
 
 ```http
 GET /api/scenarios
 ```
 
-Lists available demonstration scenarios.
+Returns available streaming incident scenarios.
 
-### Autonomous Investigation
+### Investigate Scenario
 
 ```http
 POST /api/scenarios/{scenario_id}/investigate
 ```
 
-Starts the Commander investigation for a scenario.
+Starts an autonomous investigation for a scenario.
 
 ### Regional Breakdown
 
@@ -623,167 +220,412 @@ Starts the Commander investigation for a scenario.
 GET /api/scenarios/{scenario_id}/regional-breakdown
 ```
 
-Returns regional/device QoE analysis.
+Returns regional QoE information.
 
-### Simulated Action
+### Scenario Telemetry
+
+```http
+GET /api/scenarios/{scenario_id}/telemetry
+```
+
+Returns telemetry associated with a scenario.
+
+### Simulate Action
 
 ```http
 POST /api/actions/simulate
 ```
 
-Generates a safe mitigation simulation.
-
-No production action is executed.
+Simulates a proposed remediation action.
 
 ---
 
-# 📁 Project Structure
+## 🏗️ Technology Stack
+
+### Frontend
+
+* React 18
+* TypeScript
+* Vite
+* Tailwind CSS
+
+### Backend
+
+* Python
+* FastAPI
+* Pydantic
+* Uvicorn
+
+### AI
+
+* Google Gemini
+* Google ADK
+
+### Observability
+
+* Grafana Cloud
+* Grafana MCP
+
+### Deployment
+
+* Render
+
+---
+
+## 📁 Project Structure
 
 ```text
 PostWire/
-├── postwire/
-│   ├── agent/
-│   ├── api/
-│   ├── grafana/
-│   ├── telemetry/
-│   ├── qoe/
-│   └── ...
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── components/
-│   │   ├── App.tsx
-│   │   └── ...
-│   └── package.json
+│   ├── public/
+│   ├── package.json
+│   ├── vite.config.*
+│   └── ...
+│
+├── postwire/
+│   ├── api/
+│   ├── agent/
+│   ├── telemetry/
+│   ├── scenarios/
+│   └── ...
 │
 ├── tests/
+│
 ├── Dockerfile
 ├── requirements.txt
-├── .gitignore
+├── .env.example
 ├── LICENSE
 └── README.md
 ```
 
 ---
 
-# 🔒 Safety & Security
-
-PostWire follows a conservative incident-response model.
-
-### No production mutation
-
-Recommended mitigations are explicitly:
+## 🔄 How PostWire Works
 
 ```text
-[SIMULATED]
+1. Streaming release begins
+            ↓
+2. Viewer & infrastructure telemetry changes
+            ↓
+3. PostWire collects relevant signals
+            ↓
+4. Grafana MCP provides telemetry
+            ↓
+5. Gemini AI analyzes the evidence
+            ↓
+6. Incident is classified
+            ↓
+7. Regional / device patterns are identified
+            ↓
+8. Root cause is investigated
+            ↓
+9. Remediation is recommended
+            ↓
+10. Action can be simulated
 ```
-
-No production routing, DRM systems, or infrastructure are modified.
-
-### No private chain-of-thought exposure
-
-The UI exposes:
-
-* Tool used
-* Query
-* Result
-* Evidence
-* Decision
-* Confidence
-* Recommendation
-
-It does not expose private model reasoning.
-
-### Secrets
-
-Credentials belong only in `.env`.
-
-The repository's `.gitignore` excludes `.env`.
-
-**Never commit API keys, Grafana tokens, passwords, or service credentials.**
 
 ---
 
-# 🏆 Why PostWire?
+## 🧩 Incident Intelligence Pipeline
 
-Most monitoring systems answer:
+### Step 1 — Detect
 
-> **“Is this metric abnormal?”**
+Identify unusual changes in streaming performance.
 
-PostWire asks:
+### Step 2 — Correlate
 
-> **“Is this abnormality actually hurting viewers?”**
+Combine:
 
-That distinction matters during high-volume streaming events.
+* Movie release information
+* Viewer QoE
+* Regional information
+* Infrastructure telemetry
 
-A massive premiere surge can be completely healthy.
+### Step 3 — Investigate
 
-A small global traffic change can hide a severe regional DRM failure.
+The AI commander queries relevant telemetry and evaluates evidence.
 
-PostWire connects:
+### Step 4 — Classify
+
+The incident is categorized based on observed signals.
+
+### Step 5 — Explain
+
+PostWire produces an investigation report with supporting evidence.
+
+### Step 6 — Recommend
+
+The system suggests potential remediation actions.
+
+### Step 7 — Simulate
+
+Recommended actions can be simulated before being applied.
+
+---
+
+## 🚨 Example Incident
+
+Imagine a major movie launches at 8 PM.
+
+Within minutes:
 
 ```text
-Release Expectations
-        +
-Viewer Experience
-        +
-Infrastructure Telemetry
-        ↓
-Context-Aware Incident Decision
+Traffic             ↑ 320%
+Buffering           ↑ 180%
+Playback Errors     ↑ 140%
+South Region QoE    ↓ 35%
 ```
 
-This enables an SRE to move from:
+Instead of an SRE manually checking multiple dashboards, PostWire correlates the signals.
+
+The AI might determine:
 
 ```text
-Alert
-  ↓
-Search dashboards
-  ↓
-Check logs
-  ↓
+Incident:
+Regional streaming degradation
+
+Affected Region:
+South India
+
+Likely Cause:
+Regional infrastructure capacity pressure
+
+Confidence:
+High
+
+Recommended Action:
+Scale capacity / reroute traffic
+```
+
+The action can then be simulated before operational execution.
+
+---
+
+## 🔐 Environment Variables
+
+For local development, create a `.env` file based on `.env.example`.
+
+Example:
+
+```env
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.6-flash
+
+GRAFANA_URL=your_grafana_url
+GRAFANA_SERVICE_ACCOUNT_TOKEN=your_grafana_token
+```
+
+**Never commit real API keys or service-account tokens to GitHub.**
+
+---
+
+## 💻 Local Development
+
+### Backend
+
+Clone the repository:
+
+```bash
+git clone https://github.com/prathampoojari13/PostWire.git
+cd PostWire
+```
+
+Create a virtual environment:
+
+```bash
+python -m venv .venv
+```
+
+Activate it:
+
+### Windows
+
+```bash
+.venv\Scripts\activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Start the API:
+
+```bash
+uvicorn postwire.api.server:app --reload
+```
+
+Backend:
+
+```text
+http://localhost:8000
+```
+
+Swagger:
+
+```text
+http://localhost:8000/docs
+```
+
+---
+
+### Frontend
+
+Open another terminal:
+
+```bash
+cd frontend
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start development server:
+
+```bash
+npm run dev
+```
+
+The frontend will be available at the local Vite URL shown in the terminal.
+
+---
+
+## ☁️ Production Deployment
+
+PostWire is deployed using **Render**.
+
+### Frontend
+
+```text
+Platform: Render Static Site
+Root Directory: frontend
+Build Command: npm install && npm run build
+Publish Directory: dist
+```
+
+### Backend
+
+```text
+Platform: Render Web Service
+Environment: Docker
+```
+
+---
+
+## 🌐 Production URLs
+
+### Frontend
+
+https://postwire-frontend.onrender.com/
+
+### Backend
+
+https://postwire-kzex.onrender.com/
+
+### Swagger API Documentation
+
+https://postwire-kzex.onrender.com/docs
+
+### OpenAPI
+
+https://postwire-kzex.onrender.com/openapi.json
+
+---
+
+## 🧪 API Health
+
+The deployed backend exposes:
+
+```http
+GET /health
+```
+
+Use it to verify backend availability.
+
+---
+
+## 🏆 Why PostWire?
+
+Traditional incident response often requires engineers to:
+
+```text
+Open dashboards
+      ↓
+Check metrics
+      ↓
 Compare regions
-  ↓
-Check viewer impact
-  ↓
-Guess root cause
+      ↓
+Inspect logs
+      ↓
+Identify anomalies
+      ↓
+Find root cause
+      ↓
+Decide remediation
 ```
 
-to:
+PostWire aims to compress this workflow into:
 
 ```text
-Alert
-  ↓
-PostWire investigates
-  ↓
-Evidence correlated
-  ↓
-Incident classified
-  ↓
-Root cause hypothesis
-  ↓
-Safe mitigation recommendation
+Telemetry
+    ↓
+AI Investigation
+    ↓
+Root Cause
+    ↓
+Recommended Action
 ```
+
+The goal is to move incident response from **manual dashboard hunting** toward **autonomous, evidence-driven incident intelligence**.
 
 ---
 
-# 🔮 Future Extensions
+## 🔮 Future Scope
 
 Potential future improvements include:
 
-* Real OTT QoE integrations
-* Additional streaming observability signals
-* Automated runbook execution with strict approval gates
+* Automated remediation execution
+* Real-time streaming telemetry
+* Multi-agent incident investigation
 * Historical incident learning
-* More sophisticated anomaly detection
-* Multi-region capacity forecasting
-* Integration with additional incident-management platforms
+* Predictive incident detection
+* Automated rollback
+* Slack / Teams incident notifications
+* Advanced anomaly detection
+* Continuous SRE feedback loops
 
 ---
 
-# 👨‍💻 Project
+## 👨‍💻 Author
 
-**PostWire — Autonomous Streaming Release Incident Commander**
+**Pratham K**
 
-Built for the **Google Cloud Agentic Cinema Hackathon**, targeting the **Grafana Partner Track**.
+B.E. Computer Science & Engineering
+BMS Institute of Technology & Management
 
-The project demonstrates how an autonomous AI incident commander can combine **Google ADK + Gemini + Grafana MCP + viewer QoE context** to reason about streaming incidents while keeping operational actions safe and explicitly simulated.
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+## ⭐ Support
+
+If you find PostWire interesting, consider giving the repository a ⭐ on GitHub.
+
+**GitHub:**
+https://github.com/prathampoojari13/PostWire
+
+---
+
+### 🚀 PostWire
+
+> **Observe. Investigate. Reason. Respond.**
